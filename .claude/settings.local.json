@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(code .)",
+      "WebSearch",
+      "Bash(npm create:*)",
+      "Bash(npm install:*)",
+      "Bash(copy:*)",
+      "Bash(pip freeze:*)",
+      "Bash(pip show:*)"
+    ]
+  }
+}
