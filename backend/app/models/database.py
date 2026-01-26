@@ -1,12 +1,17 @@
 import os
+from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 
-load_dotenv()
+# Get the backend directory (parent of app/models/)
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+load_dotenv(BACKEND_DIR / ".env")
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./film.db")
+# Use absolute path for SQLite database
+DEFAULT_DB_PATH = BACKEND_DIR / "film.db"
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DEFAULT_DB_PATH}")
 
 engine = create_engine(
     DATABASE_URL,

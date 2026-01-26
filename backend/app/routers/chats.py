@@ -5,13 +5,18 @@ from typing import List
 import json
 
 from ..models.database import get_db
-from ..models.schemas import Chat, Message, MessageRole
+from ..models.schemas import Chat, Message, MessageRole, ContextAttachment, UploadedFile, SourceType
 from ..models.pydantic_models import (
     ChatCreate, ChatUpdate, ChatResponse, ChatListResponse,
     MessageCreate, MessageResponse, ChatMessageRequest
 )
 from ..services.gemini_service import gemini_service
 from ..services.chroma_service import chroma_service
+from pathlib import Path
+
+# Use absolute path for uploads directory
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+UPLOAD_DIR = BACKEND_DIR / "uploads"
 
 router = APIRouter(prefix="/api/chats", tags=["chats"])
 
@@ -120,10 +125,39 @@ async def send_message(chat_id: str, request: ChatMessageRequest, db: Session = 
     # Get chat history
     history = [{"role": msg.role.value, "content": msg.content} for msg in chat.messages[:-1]]
 
-    # Get context if provided
-    context = None
-    if request.context_ids:
-        context = chroma_service.get_chat_context(request.context_ids)
+    # Get context from attachments
+    context_parts = []
+    try:
+        attachments = db.query(ContextAttachment).filter(ContextAttachment.chat_id == chat_id).all()
+
+        for attachment in attachments:
+            try:
+                if attachment.source_type == SourceType.CHAT:
+                    # Get messages from attached chat
+                    source_chat = db.query(Chat).filter(Chat.id == attachment.source_id).first()
+                    if source_chat and source_chat.messages:
+                        chat_context = f"--- Context from chat: {source_chat.title} ---\n"
+                        for msg in source_chat.messages:
+                            chat_context += f"{msg.role.value}: {msg.content}\n"
+                        context_parts.append(chat_context)
+                elif attachment.source_type == SourceType.FILE:
+                    # Get file content from vector store
+                    file_record = db.query(UploadedFile).filter(UploadedFile.id == attachment.source_id).first()
+                    if file_record:
+                        # Try to get from vector store
+                        file_context = chroma_service.get_document_by_id(attachment.source_id)
+                        if file_context:
+                            context_parts.append(f"--- Context from file: {file_record.original_filename} ---\n{file_context}")
+                        else:
+                            # File not in vector store, add a note
+                            context_parts.append(f"--- Context from file: {file_record.original_filename} ---\n[File content not available - please re-upload]")
+            except Exception as e:
+                print(f"Error processing attachment {attachment.id}: {e}")
+                continue
+    except Exception as e:
+        print(f"Error loading attachments: {e}")
+
+    context = "\n\n".join(context_parts) if context_parts else None
 
     # Generate response
     response_text = gemini_service.generate_response(

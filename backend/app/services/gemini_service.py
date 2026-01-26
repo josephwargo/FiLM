@@ -22,7 +22,7 @@ class GeminiService:
             for msg in history:
                 role = "user" if msg["role"] == "user" else "model"
                 chat_history.append(
-                    types.Content(role=role, parts=[types.Part.from_text(msg["content"])])
+                    types.Content(role=role, parts=[types.Part(text=msg["content"])])
                 )
 
         # Build the prompt with context if provided
@@ -55,7 +55,7 @@ User question: {message}"""
             for msg in history:
                 role = "user" if msg["role"] == "user" else "model"
                 chat_history.append(
-                    types.Content(role=role, parts=[types.Part.from_text(msg["content"])])
+                    types.Content(role=role, parts=[types.Part(text=msg["content"])])
                 )
 
         prompt = message

@@ -16,7 +16,7 @@ app = FastAPI(
 # CORS middleware for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -40,3 +40,22 @@ def root():
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
+
+
+@app.get("/debug")
+def debug_info():
+    from app.models.database import DATABASE_URL, SessionLocal
+    from app.models.schemas import UploadedFile
+    import os
+
+    db = SessionLocal()
+    try:
+        file_count = db.query(UploadedFile).count()
+    finally:
+        db.close()
+
+    return {
+        "database_url": str(DATABASE_URL),
+        "cwd": os.getcwd(),
+        "file_count": file_count
+    }

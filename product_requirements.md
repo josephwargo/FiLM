@@ -1,4 +1,4 @@
-# FiLM - Web App Requirements v2
+# FiLM - Product Requirements
 
 ## Overview
 Tool to enable better management, organization, and storage of LLM chats & context.
@@ -9,19 +9,24 @@ Tool to enable better management, organization, and storage of LLM chats & conte
 
 ### Detailed Feature Breakdown
 1. **Chat Interface**
-   - Send messages to LLM and receive responses
-   - Real-time streaming responses
-   - Markdown rendering for code blocks and formatting
+   - [x] Send messages to LLM and receive responses
+   - [x] Streaming responses endpoint (UI uses non-streaming)
+   - [ ] Markdown rendering for code blocks and formatting
 
 2. **Virtual File System**
-   - Create folders and subfolders to organize chats
-   - Move, rename, and delete chats
-   - Search across all chats
+   - [x] Create folders and subfolders to organize chats
+   - [x] Move, rename, and delete chats
+   - [x] Drag & drop chats into folders
+   - [ ] Search across all chats
 
 3. **Context/RAG System**
-   - Select past chats to include as context for new conversations
-   - Upload files (PDF, TXT, MD) to use as context
-   - Visual indicator showing what context is attached to current chat
+   - [x] Select past chats to include as context for new conversations
+   - [x] Upload files (PDF, TXT, MD) to use as context
+   - [x] PDF text extraction with pypdf
+   - [x] Visual indicator showing what context is attached to current chat
+   - [x] Drag & drop context panel with "Current Context" drop zone
+   - [x] Context persistence per chat
+   - [x] Delete uploaded files
 
 ## Technical Requirements
 
@@ -47,62 +52,82 @@ Tool to enable better management, organization, and storage of LLM chats & conte
     └──────────┘   └────────────┘   └──────────┘
 ```
 
-### Tech Stack (MVP)
-| Component | Technology | Why |
-|-----------|------------|-----|
-| **LLM** | Gemini API (free tier) | $0 cost, 1500 req/day, good quality |
-| **Embeddings** | Gemini Embeddings (free) | $0 cost, same API, good multilingual |
-| **Vector DB** | ChromaDB | Local, free, supports metadata for folders |
-| **Backend** | FastAPI (Python) | Easy LangChain integration |
-| **Frontend** | React + Vite | Fast, modern, good ecosystem |
-| **Metadata DB** | SQLite (MVP) → Postgres (scale) | Simple start, easy migration |
-| **RAG Framework** | LangChain | Handles chunking, retrieval, context injection |
+### Tech Stack (Implemented)
+| Component | Technology | Notes |
+|-----------|------------|-------|
+| **LLM** | Gemini 2.0 Flash | Via google-genai SDK |
+| **Embeddings** | Sentence Transformers | all-MiniLM-L6-v2 model |
+| **Vector DB** | ChromaDB | Local storage, metadata filtering |
+| **Backend** | FastAPI (Python) | Async support, automatic OpenAPI docs |
+| **Frontend** | React + Vite + TypeScript | Zustand for state management |
+| **Metadata DB** | SQLite | SQLAlchemy ORM |
+| **PDF Processing** | pypdf | Text extraction from PDFs |
+| **Icons** | Lucide React | Modern icon set |
 
-### API Endpoints (Draft)
+### API Endpoints (Implemented)
 ```
-POST   /api/chat                 - Send message, get response
+# Chats
 GET    /api/chats                - List all chats
 POST   /api/chats                - Create new chat
-GET    /api/chats/:id            - Get chat history
+GET    /api/chats/:id            - Get chat with messages
 DELETE /api/chats/:id            - Delete chat
 PATCH  /api/chats/:id            - Update chat (rename, move folder)
+POST   /api/chats/:id/messages   - Send message, get AI response
+POST   /api/chats/:id/messages/stream - Send message, get streaming response
 
+# Folders
 GET    /api/folders              - List folder structure
 POST   /api/folders              - Create folder
 DELETE /api/folders/:id          - Delete folder
 
+# Context
+GET    /api/context/:chat_id     - Get attachments for a chat
 POST   /api/context/attach       - Attach chat/file as context
-DELETE /api/context/detach       - Remove context
-POST   /api/files/upload         - Upload file for RAG
+DELETE /api/context/:attachment_id - Remove context attachment
+
+# Files
+GET    /api/context/files        - List all uploaded files
+POST   /api/context/files/upload - Upload file for RAG (PDF, TXT, MD)
+DELETE /api/context/files/:id    - Delete uploaded file
 ```
 
-### Data Models (Draft)
+### Data Models (Implemented)
 ```
 Chat:
-  - id: string
+  - id: string (UUID)
   - title: string
-  - folder_id: string (nullable)
+  - folder_id: string (nullable, FK to Folder)
   - messages: Message[]
   - created_at: datetime
   - updated_at: datetime
 
 Message:
-  - id: string
-  - chat_id: string
+  - id: string (UUID)
+  - chat_id: string (FK to Chat)
   - role: "user" | "assistant"
   - content: string
-  - timestamp: datetime
+  - created_at: datetime
 
 Folder:
-  - id: string
+  - id: string (UUID)
   - name: string
-  - parent_id: string (nullable)
+  - parent_id: string (nullable, FK to Folder)
+  - created_at: datetime
 
 ContextAttachment:
-  - id: string
-  - chat_id: string (the chat using this context)
+  - id: string (UUID)
+  - chat_id: string (FK to Chat - the chat using this context)
   - source_type: "chat" | "file"
   - source_id: string
+  - created_at: datetime
+
+UploadedFile:
+  - id: string (UUID)
+  - filename: string (stored filename)
+  - original_filename: string
+  - content_type: string
+  - file_size: int
+  - created_at: datetime
 ```
 
 ## Design Requirements
@@ -144,28 +169,42 @@ ContextAttachment:
 
 ## Development Phases
 
-### Phase 1: Core Chat (Week 1)
-- [ ] Basic chat UI with Gemini integration
-- [ ] Message history persistence (SQLite)
-- [ ] Basic styling
+### Phase 1: Core Chat - COMPLETE
+- [x] Basic chat UI with Gemini integration
+- [x] Message history persistence (SQLite)
+- [x] Basic styling (dark theme)
 
-### Phase 2: File System (Week 2)
-- [ ] Folder structure UI
-- [ ] Create/rename/delete/move chats and folders
-- [ ] SQLite schema for folders
+### Phase 2: File System - COMPLETE
+- [x] Folder structure UI
+- [x] Create/rename/delete/move chats and folders
+- [x] SQLite schema for folders
+- [x] Drag & drop chats into folders
 
-### Phase 3: RAG/Context (Week 3)
-- [ ] ChromaDB integration
-- [ ] Embed and store chat messages
-- [ ] Context selection UI
-- [ ] Inject context into prompts
+### Phase 3: RAG/Context - COMPLETE
+- [x] ChromaDB integration
+- [x] Embed and store chat messages
+- [x] Context selection UI with drag & drop
+- [x] Inject context into prompts
+- [x] Context persistence per chat
 
-### Phase 4: Polish (Week 4)
-- [ ] File upload support
+### Phase 4: Polish - IN PROGRESS
+- [x] File upload support (PDF, TXT, MD)
+- [x] PDF text extraction
+- [x] File deletion
 - [ ] Search across chats
+- [ ] Markdown rendering in chat
 - [ ] UI polish and responsive design
 
+## Future Enhancements
+- [ ] Search across all chats
+- [ ] Markdown rendering for code blocks
+- [ ] Real-time streaming in UI (backend ready)
+- [ ] Subfolder support (nested folders)
+- [ ] Export/import chats
+- [ ] User authentication
+- [ ] Electron desktop wrapper
+
 ## Additional Notes
-- Start with local-only (no auth) for MVP
+- Currently local-only (no auth) for MVP
 - Add user accounts in v2 if needed
 - Consider Electron wrapper for desktop app later

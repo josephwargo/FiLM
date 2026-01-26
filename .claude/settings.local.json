@@ -7,7 +7,19 @@
       "Bash(npm install:*)",
       "Bash(copy:*)",
       "Bash(pip freeze:*)",
-      "Bash(pip show:*)"
+      "Bash(pip show:*)",
+      "Bash(findstr:*)",
+      "Bash(npm run dev)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run build:*)",
+      "Bash(curl:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(sqlite3:*)",
+      "Bash(tasklist:*)",
+      "Bash(git mv:*)",
+      "Bash(netstat:*)",
+      "Bash(taskkill:*)"
     ]
   }
 }

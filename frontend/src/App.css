@@ -156,6 +156,41 @@ body {
   border-color: var(--accent);
 }
 
+/* Drag and Drop */
+.chat-draggable {
+  cursor: grab;
+}
+
+.chat-draggable:active {
+  cursor: grabbing;
+}
+
+.folder-drop-zone.drag-over,
+.root-chats-drop-zone.drag-over {
+  background-color: rgba(233, 69, 96, 0.2);
+  border-radius: 4px;
+}
+
+.root-chats-drop-zone {
+  min-height: 40px;
+  padding-bottom: 8px;
+}
+
+.root-chats-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  padding: 8px 12px 4px;
+  letter-spacing: 0.5px;
+}
+
+.drop-hint {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  font-style: italic;
+}
+
 /* Chat Area */
 .chat-area {
   flex: 1;
@@ -434,6 +469,119 @@ body {
 }
 
 .context-item-remove:hover {
+  color: var(--error);
+}
+
+/* Current Context Drop Zone */
+.current-context-zone {
+  margin: 12px;
+  padding: 12px;
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  background-color: var(--bg-tertiary);
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.current-context-zone.drag-over {
+  border-color: var(--accent);
+  background-color: rgba(233, 69, 96, 0.1);
+}
+
+.current-context-zone.disabled {
+  opacity: 0.5;
+}
+
+.current-context-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+  font-weight: 500;
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+}
+
+.current-context-empty {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-style: italic;
+  text-align: center;
+  padding: 8px;
+}
+
+.current-context-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.current-context-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background-color: rgba(233, 69, 96, 0.15);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.current-context-item span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-item.draggable {
+  cursor: grab;
+}
+
+.context-item.draggable:active {
+  cursor: grabbing;
+}
+
+.context-item.attached {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.attached-badge {
+  font-size: 0.7rem;
+  background-color: var(--accent);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: auto;
+}
+
+.context-empty-hint {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-style: italic;
+  padding: 8px;
+  text-align: center;
+}
+
+.file-delete-btn {
+  opacity: 0;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s, color 0.15s;
+  margin-left: auto;
+}
+
+.context-item:hover .file-delete-btn {
+  opacity: 1;
+}
+
+.file-delete-btn:hover {
   color: var(--error);
 }
 

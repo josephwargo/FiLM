@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Chat, ChatListItem, Message, FolderTreeItem } from '../types';
+import type { Chat, ChatListItem, Message, FolderTreeItem } from '../types';
 import { chatsAPI, foldersAPI } from '../services/api';
 
 interface ChatStore {

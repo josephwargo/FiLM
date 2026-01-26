@@ -479,6 +479,89 @@ npm run dev
 
 ---
 
+## Session 2 Updates (January 25, 2026)
+
+### Bug Fixes
+
+1. **TypeScript Import Errors**
+   - Fixed `verbatimModuleSyntax` errors by changing value imports to type-only imports
+   - Files affected: `ContextPanel.tsx`, `Sidebar.tsx`, `chatStore.ts`
+   - Changed `import { Type }` to `import type { Type }`
+
+2. **API Key Security**
+   - Fixed leaked API key in `.env.example` (was committed to git)
+   - Changed to placeholder value: `GEMINI_API_KEY=your_gemini_api_key_here`
+
+3. **CORS Configuration**
+   - Added port 5174 to allowed origins (Vite uses this when 5173 is busy)
+
+4. **Database Path Issues**
+   - Fixed relative path issue where `sqlite:///./film.db` resolved differently based on working directory
+   - Changed to absolute paths in `database.py`, `chroma_service.py`, and `context.py`
+   - Removed hardcoded paths from `.env` to use defaults
+
+5. **Route Ordering Bug**
+   - Fixed `/api/context/files` returning empty array
+   - Issue: `/{chat_id}` route was matching "files" as a chat_id
+   - Solution: Moved `/files` routes before `/{chat_id}` in `context.py`
+
+6. **Gemini SDK API Change**
+   - Fixed `Part.from_text()` error (API changed)
+   - Changed to `types.Part(text=msg["content"])` in `gemini_service.py`
+
+### New Features
+
+1. **Drag & Drop Chats into Folders**
+   - Added `draggable` attribute to chat items in Sidebar
+   - Added drop zones on folders
+   - Added "Chats" section at bottom as drop zone for removing from folders
+   - Visual feedback with highlight on drag over
+
+2. **PDF Text Extraction**
+   - Added `pypdf` package for PDF processing
+   - File upload now extracts text from PDFs for RAG context
+   - Falls back to placeholder message if extraction fails
+
+3. **Drag & Drop Context Panel**
+   - Added "Current Context" drop zone at top of Context panel
+   - Chats and files are draggable into the context zone
+   - Visual feedback with border highlight
+   - "Added" badge shows on items already attached
+   - Context persists per chat (switches when changing chats)
+
+4. **File Deletion**
+   - Added trash icon button on each file in Context panel
+   - Confirmation prompt before deletion
+   - Removes file from filesystem, database, and vector store
+
+### Updated Dependencies
+
+**Backend (`requirements.txt`):**
+```
+pypdf==5.1.0  # Added for PDF text extraction
+```
+
+### Files Modified
+
+**Backend:**
+- `main.py` - Added debug endpoint, updated CORS
+- `app/models/database.py` - Absolute paths for SQLite
+- `app/routers/chats.py` - Context retrieval with error handling
+- `app/routers/context.py` - Route reordering, absolute paths
+- `app/services/gemini_service.py` - Fixed Part API
+- `app/services/chroma_service.py` - Absolute paths, added `get_document_by_id()`
+- `.env` - Removed hardcoded paths
+- `.env.example` - Removed leaked API key
+- `requirements.txt` - Added pypdf
+
+**Frontend:**
+- `src/components/Sidebar.tsx` - Drag & drop for chats
+- `src/components/ContextPanel.tsx` - Drag & drop context, file deletion
+- `src/store/chatStore.ts` - Fixed type imports
+- `src/App.css` - Styles for drag & drop, context zone, delete button
+
+---
+
 ## Chat Transcript
 
 The following is the complete conversation that led to building this MVP:

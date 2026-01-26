@@ -1,11 +1,16 @@
 import os
 from typing import List
+from pathlib import Path
 import chromadb
 from dotenv import load_dotenv
 
-load_dotenv()
+# Get the backend directory
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+load_dotenv(BACKEND_DIR / ".env")
 
-CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "./chroma_data")
+# Use absolute path for ChromaDB
+DEFAULT_CHROMA_DIR = str(BACKEND_DIR / "chroma_data")
+CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", DEFAULT_CHROMA_DIR)
 
 
 class ChromaService:
@@ -91,6 +96,16 @@ class ChromaService:
             self.collection.delete(ids=[message_id])
         except Exception:
             pass
+
+    def get_document_by_id(self, doc_id: str) -> str:
+        """Get a document by its ID."""
+        try:
+            results = self.collection.get(ids=[doc_id])
+            if results and results["documents"] and len(results["documents"]) > 0:
+                return results["documents"][0]
+        except Exception:
+            pass
+        return ""
 
 
 chroma_service = ChromaService()
