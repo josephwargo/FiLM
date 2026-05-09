@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Loader2, User, Bot } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import rehypeHighlight from 'rehype-highlight';
 import { useChatStore } from '../store/chatStore';
 
+const MD_PLUGINS = [rehypeHighlight];
+
 export function ChatArea() {
-  const { currentChat, isSending, sendMessage, createChat } = useChatStore();
+  const { currentChat, isSending, streamingContent, sendMessage, createChat } = useChatStore();
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -14,19 +17,13 @@ export function ChatArea() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [currentChat?.messages]);
+  }, [currentChat?.messages, streamingContent]);
 
   const handleSend = async () => {
     if (!input.trim() || isSending) return;
-
     const message = input.trim();
     setInput('');
-
-    if (!currentChat) {
-      // Create a new chat first
-      await createChat();
-    }
-
+    if (!currentChat) await createChat();
     await sendMessage(message);
   };
 
@@ -37,6 +34,28 @@ export function ChatArea() {
     }
   };
 
+  const inputBox = (placeholder: string) => (
+    <div className="chat-input-container">
+      <div className="chat-input-wrapper">
+        <textarea
+          className="chat-input"
+          placeholder={placeholder}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          rows={1}
+        />
+        <button
+          className="btn btn-primary btn-send"
+          onClick={handleSend}
+          disabled={!input.trim() || isSending}
+        >
+          {isSending ? <Loader2 size={20} className="spin" /> : <Send size={20} />}
+        </button>
+      </div>
+    </div>
+  );
+
   if (!currentChat) {
     return (
       <div className="chat-area">
@@ -44,30 +63,10 @@ export function ChatArea() {
           <div className="chat-empty-content">
             <h2>Welcome to FiLM</h2>
             <p>File-based LLM Management</p>
-            <p className="chat-empty-hint">
-              Create a new chat or select an existing one to get started.
-            </p>
+            <p className="chat-empty-hint">Create a new chat or select one to get started.</p>
           </div>
         </div>
-        <div className="chat-input-container">
-          <div className="chat-input-wrapper">
-            <textarea
-              className="chat-input"
-              placeholder="Type a message to start a new chat..."
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              rows={1}
-            />
-            <button
-              className="btn btn-primary btn-send"
-              onClick={handleSend}
-              disabled={!input.trim() || isSending}
-            >
-              {isSending ? <Loader2 size={20} className="spin" /> : <Send size={20} />}
-            </button>
-          </div>
-        </div>
+        {inputBox('Type a message to start a new chat...')}
       </div>
     );
   }
@@ -79,7 +78,7 @@ export function ChatArea() {
       </div>
 
       <div className="chat-messages">
-        {currentChat.messages.length === 0 ? (
+        {currentChat.messages.length === 0 && streamingContent === null ? (
           <div className="chat-empty">
             <p>Start the conversation by typing a message below.</p>
           </div>
@@ -93,23 +92,29 @@ export function ChatArea() {
                 {message.role === 'user' ? <User size={20} /> : <Bot size={20} />}
               </div>
               <div className="message-content">
-                <ReactMarkdown>{message.content}</ReactMarkdown>
+                <ReactMarkdown rehypePlugins={MD_PLUGINS}>{message.content}</ReactMarkdown>
               </div>
             </div>
           ))
         )}
 
+        {/* Streaming / loading state */}
         {isSending && (
           <div className="message message-assistant">
             <div className="message-avatar">
               <Bot size={20} />
             </div>
             <div className="message-content">
-              <div className="typing-indicator">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
+              {streamingContent !== null && streamingContent.length > 0 ? (
+                <div className="streaming-content">
+                  <ReactMarkdown rehypePlugins={MD_PLUGINS}>{streamingContent}</ReactMarkdown>
+                  <span className="streaming-cursor" />
+                </div>
+              ) : (
+                <div className="typing-indicator">
+                  <span /><span /><span />
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -117,25 +122,7 @@ export function ChatArea() {
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="chat-input-container">
-        <div className="chat-input-wrapper">
-          <textarea
-            className="chat-input"
-            placeholder="Type your message..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            rows={1}
-          />
-          <button
-            className="btn btn-primary btn-send"
-            onClick={handleSend}
-            disabled={!input.trim() || isSending}
-          >
-            {isSending ? <Loader2 size={20} className="spin" /> : <Send size={20} />}
-          </button>
-        </div>
-      </div>
+      {inputBox('Type your message...')}
     </div>
   );
 }

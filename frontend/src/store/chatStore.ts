@@ -9,6 +9,7 @@ interface ChatStore {
   folderTree: FolderTreeItem[];
   isLoading: boolean;
   isSending: boolean;
+  streamingContent: string | null;
   error: string | null;
 
   // Actions
@@ -31,6 +32,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   folderTree: [],
   isLoading: false,
   isSending: false,
+  streamingContent: null,
   error: null,
 
   loadChats: async () => {
@@ -111,11 +113,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
-  sendMessage: async (message: string, contextIds: string[] = []) => {
+  sendMessage: async (message: string, _contextIds: string[] = []) => {
     const currentChat = get().currentChat;
     if (!currentChat) return;
 
-    // Optimistically add user message
     const userMessage: Message = {
       id: `temp-${Date.now()}`,
       chat_id: currentChat.id,
@@ -129,32 +130,45 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         ? { ...state.currentChat, messages: [...state.currentChat.messages, userMessage] }
         : null,
       isSending: true,
+      streamingContent: '',
     }));
 
-    try {
-      const response = await chatsAPI.sendMessage(currentChat.id, message, contextIds);
-
-      // Add assistant message
-      const assistantMessage: Message = {
-        id: response.message_id,
-        chat_id: currentChat.id,
-        role: 'assistant',
-        content: response.response,
-        timestamp: new Date().toISOString(),
-      };
-
-      set((state) => ({
-        currentChat: state.currentChat
-          ? { ...state.currentChat, messages: [...state.currentChat.messages, assistantMessage] }
-          : null,
-        isSending: false,
-      }));
-
-      // Reload chats to update title if needed
-      await get().loadChats();
-    } catch (error) {
-      set({ error: (error as Error).message, isSending: false });
-    }
+    await new Promise<void>((resolve) => {
+      chatsAPI.streamMessage(
+        currentChat.id,
+        message,
+        (chunk) => {
+          set((state) => ({ streamingContent: (state.streamingContent ?? '') + chunk }));
+        },
+        (messageId, title) => {
+          const finalContent = get().streamingContent ?? '';
+          const assistantMessage: Message = {
+            id: messageId,
+            chat_id: currentChat.id,
+            role: 'assistant',
+            content: finalContent,
+            timestamp: new Date().toISOString(),
+          };
+          set((state) => ({
+            currentChat: state.currentChat
+              ? {
+                  ...state.currentChat,
+                  title: title ?? state.currentChat.title,
+                  messages: [...state.currentChat.messages, assistantMessage],
+                }
+              : null,
+            isSending: false,
+            streamingContent: null,
+          }));
+          get().loadChats();
+          resolve();
+        },
+        (error) => {
+          set({ error: error.message, isSending: false, streamingContent: null });
+          resolve();
+        }
+      );
+    });
   },
 
   createFolder: async (name: string, parentId?: string) => {

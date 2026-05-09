@@ -45,6 +45,44 @@ export const chatsAPI = {
       method: 'POST',
       body: JSON.stringify({ message, context_ids: contextIds }),
     }),
+
+  streamMessage: async (
+    chatId: string,
+    message: string,
+    onChunk: (chunk: string) => void,
+    onDone: (messageId: string, title?: string) => void,
+    onError: (error: Error) => void
+  ) => {
+    try {
+      const response = await fetch(`${API_BASE}/chats/${chatId}/messages/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, context_ids: [] }),
+      });
+
+      if (!response.ok) throw new Error('Stream request failed');
+
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = JSON.parse(line.slice(6));
+          if (data.chunk !== undefined) onChunk(data.chunk);
+          else if (data.done) onDone(data.message_id, data.title);
+        }
+      }
+    } catch (error) {
+      onError(error as Error);
+    }
+  },
 };
 
 // Folders

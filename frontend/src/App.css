@@ -294,7 +294,49 @@ body {
 
 .message-content code {
   font-family: 'Fira Code', 'Consolas', monospace;
-  font-size: 0.9rem;
+  font-size: 0.875rem;
+}
+
+/* Inline code (not inside pre) */
+.message-content :not(pre) > code {
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+/* Code block header-like treatment */
+.message-content pre {
+  position: relative;
+}
+
+.message-content pre > code {
+  display: block;
+  border-radius: 8px;
+  padding: 12px 16px !important;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+/* Streaming */
+.streaming-content {
+  position: relative;
+}
+
+.streaming-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background-color: var(--accent);
+  vertical-align: text-bottom;
+  margin-left: 2px;
+  animation: blink 0.8s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 /* Typing Indicator */
@@ -688,4 +730,51 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background-color: var(--text-secondary);
+}
+
+/* Responsive */
+@media (max-width: 1100px) {
+  .context-panel:not(.collapsed) {
+    width: 220px;
+  }
+}
+
+@media (max-width: 900px) {
+  .context-panel {
+    display: none;
+  }
+
+  .sidebar {
+    width: 240px;
+  }
+}
+
+@media (max-width: 600px) {
+  .sidebar {
+    position: absolute;
+    z-index: 100;
+    height: 100%;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .chat-messages {
+    padding: 16px;
+  }
+
+  .chat-input-container {
+    padding: 12px 16px;
+  }
+
+  .message {
+    gap: 10px;
+  }
+
+  .message-content {
+    max-width: 100%;
+  }
 }
