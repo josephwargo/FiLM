@@ -52,5 +52,15 @@ export interface UploadedFile {
   id: string;
   filename: string;
   size: number;
+  file_folder_id: string | null;
   created_at: string;
+}
+
+export interface FileFolder {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  created_at: string;
+  files: UploadedFile[];
+  children: FileFolder[];
 }

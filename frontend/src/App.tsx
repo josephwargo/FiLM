@@ -7,9 +7,14 @@ import './App.css';
 function App() {
   return (
     <div className="app">
-      <Sidebar />
-      <ChatArea />
-      <ContextPanel />
+      <div className="topbar">
+        <span className="topbar-logo">FiLM</span>
+      </div>
+      <div className="app-body">
+        <Sidebar />
+        <ChatArea />
+        <ContextPanel />
+      </div>
     </div>
   );
 }

@@ -99,7 +99,7 @@ export const foldersAPI = {
       body: JSON.stringify(data),
     }),
 
-  update: (folderId: string, data: { name?: string; parent_id?: string }) =>
+  update: (folderId: string, data: { name?: string; parent_id?: string | null }) =>
     fetchAPI<any>(`/folders/${folderId}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
@@ -128,6 +128,30 @@ export const contextAPI = {
 
   deleteFile: (fileId: string) =>
     fetchAPI<any>(`/context/files/${fileId}`, { method: 'DELETE' }),
+
+  moveFile: (fileId: string, folderId: string | null) =>
+    fetchAPI<any>(`/context/files/${fileId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ file_folder_id: folderId }),
+    }),
+
+  listFileFolders: () =>
+    fetchAPI<any[]>('/context/file-folders'),
+
+  createFileFolder: (name: string) =>
+    fetchAPI<any>('/context/file-folders', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+
+  deleteFileFolder: (folderId: string) =>
+    fetchAPI<any>(`/context/file-folders/${folderId}`, { method: 'DELETE' }),
+
+  moveFileFolder: (folderId: string, parentId: string | null) =>
+    fetchAPI<any>(`/context/file-folders/${folderId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ parent_id: parentId }),
+    }),
 
   uploadFile: async (file: File) => {
     const formData = new FormData();
