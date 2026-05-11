@@ -213,20 +213,50 @@ async def send_message_stream(chat_id: str, request: ChatMessageRequest, db: Ses
     db.commit()
     db.refresh(user_message)
 
-    # Add to vector store
     chroma_service.add_message(
         message_id=user_message.id,
         content=request.message,
         metadata={"chat_id": chat_id, "role": "user"}
     )
 
-    # Get chat history
+    # Get chat history (exclude the message we just saved)
     history = [{"role": msg.role.value, "content": msg.content} for msg in chat.messages[:-1]]
 
-    # Get context if provided
-    context = None
-    if request.context_ids:
-        context = chroma_service.get_chat_context(request.context_ids)
+    # Load context from DB attachments (same logic as non-streaming endpoint)
+    context_parts = []
+    try:
+        attachments = db.query(ContextAttachment).filter(ContextAttachment.chat_id == chat_id).all()
+        for attachment in attachments:
+            try:
+                if attachment.source_type == SourceType.CHAT:
+                    source_chat = db.query(Chat).filter(Chat.id == attachment.source_id).first()
+                    if source_chat and source_chat.messages:
+                        chat_context = f"--- Context from chat: {source_chat.title} ---\n"
+                        for msg in source_chat.messages:
+                            chat_context += f"{msg.role.value}: {msg.content}\n"
+                        context_parts.append(chat_context)
+                elif attachment.source_type == SourceType.FILE:
+                    file_record = db.query(UploadedFile).filter(UploadedFile.id == attachment.source_id).first()
+                    if file_record:
+                        file_context = chroma_service.get_document_by_id(attachment.source_id)
+                        if file_context:
+                            context_parts.append(f"--- Context from file: {file_record.original_filename} ---\n{file_context}")
+                        else:
+                            context_parts.append(f"--- Context from file: {file_record.original_filename} ---\n[File content not available - please re-upload]")
+            except Exception as e:
+                print(f"Error processing attachment {attachment.id}: {e}")
+                continue
+    except Exception as e:
+        print(f"Error loading attachments: {e}")
+
+    context = "\n\n".join(context_parts) if context_parts else None
+
+    # Determine if this is the first message and needs a title
+    is_first_message = len(chat.messages) <= 2 and chat.title == "New Chat"
+    new_title = request.message[:50] + ("..." if len(request.message) > 50 else "") if is_first_message else None
+    if new_title:
+        chat.title = new_title
+        db.commit()
 
     async def generate():
         full_response = ""
@@ -238,7 +268,6 @@ async def send_message_stream(chat_id: str, request: ChatMessageRequest, db: Ses
             full_response += chunk
             yield f"data: {json.dumps({'chunk': chunk})}\n\n"
 
-        # Save complete response
         assistant_message = Message(
             chat_id=chat_id,
             role=MessageRole.ASSISTANT,
@@ -247,13 +276,12 @@ async def send_message_stream(chat_id: str, request: ChatMessageRequest, db: Ses
         db.add(assistant_message)
         db.commit()
 
-        # Add to vector store
         chroma_service.add_message(
             message_id=assistant_message.id,
             content=full_response,
             metadata={"chat_id": chat_id, "role": "assistant"}
         )
 
-        yield f"data: {json.dumps({'done': True, 'message_id': assistant_message.id})}\n\n"
+        yield f"data: {json.dumps({'done': True, 'message_id': assistant_message.id, 'title': new_title})}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")

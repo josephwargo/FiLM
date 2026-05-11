@@ -1,5 +1,9 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
+
+
+def _utcnow():
+    return datetime.now(timezone.utc)
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum
 from sqlalchemy.orm import relationship
 import enum
@@ -27,8 +31,8 @@ class Folder(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     name = Column(String(255), nullable=False)
     parent_id = Column(String, ForeignKey("folders.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     # Relationships
     parent = relationship("Folder", remote_side=[id], backref="children")
@@ -41,8 +45,8 @@ class Chat(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     title = Column(String(255), nullable=False, default="New Chat")
     folder_id = Column(String, ForeignKey("folders.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     # Relationships
     folder = relationship("Folder", back_populates="chats")
@@ -57,7 +61,7 @@ class Message(Base):
     chat_id = Column(String, ForeignKey("chats.id"), nullable=False)
     role = Column(Enum(MessageRole), nullable=False)
     content = Column(Text, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=_utcnow)
 
     # Relationships
     chat = relationship("Chat", back_populates="messages")
@@ -70,10 +74,22 @@ class ContextAttachment(Base):
     chat_id = Column(String, ForeignKey("chats.id"), nullable=False)
     source_type = Column(Enum(SourceType), nullable=False)
     source_id = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=_utcnow)
 
     # Relationships
     chat = relationship("Chat", back_populates="context_attachments")
+
+
+class FileFolder(Base):
+    __tablename__ = "file_folders"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    name = Column(String(255), nullable=False)
+    parent_id = Column(String, ForeignKey("file_folders.id"), nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+    parent = relationship("FileFolder", remote_side=[id], backref="children")
+    files = relationship("UploadedFile", back_populates="file_folder")
 
 
 class UploadedFile(Base):
@@ -84,4 +100,7 @@ class UploadedFile(Base):
     original_filename = Column(String(255), nullable=False)
     content_type = Column(String(100), nullable=False)
     size = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    file_folder_id = Column(String, ForeignKey("file_folders.id"), nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+    file_folder = relationship("FileFolder", back_populates="files")

@@ -1,11 +1,25 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.models.database import Base, engine
 from app.routers import chats, folders, context
 
-# Create database tables
+# Create new tables (existing tables are not modified by create_all)
 Base.metadata.create_all(bind=engine)
+
+# Inline migrations — each is a no-op if the column already exists
+_MIGRATIONS = [
+    "ALTER TABLE uploaded_files ADD COLUMN file_folder_id VARCHAR REFERENCES file_folders(id)",
+    "ALTER TABLE file_folders ADD COLUMN parent_id VARCHAR REFERENCES file_folders(id)",
+]
+with engine.connect() as _conn:
+    for _sql in _MIGRATIONS:
+        try:
+            _conn.execute(text(_sql))
+            _conn.commit()
+        except Exception:
+            pass
 
 app = FastAPI(
     title="FiLM API",

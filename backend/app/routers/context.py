@@ -8,8 +8,8 @@ import io
 from pypdf import PdfReader
 
 from ..models.database import get_db
-from ..models.schemas import ContextAttachment, UploadedFile, Chat, SourceType
-from ..models.pydantic_models import ContextAttachmentCreate, ContextAttachmentResponse
+from ..models.schemas import ContextAttachment, UploadedFile, FileFolder, Chat, SourceType
+from ..models.pydantic_models import ContextAttachmentCreate, ContextAttachmentResponse, FileFolderCreate
 from ..services.chroma_service import chroma_service
 from pathlib import Path
 
@@ -19,6 +19,103 @@ router = APIRouter(prefix="/api/context", tags=["context"])
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 UPLOAD_DIR = BACKEND_DIR / "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+# --- File folder routes ---
+
+def _file_folder_is_descendant(db, ancestor_id: str, folder_id: str) -> bool:
+    node = db.query(FileFolder).filter(FileFolder.id == folder_id).first()
+    seen = set()
+    while node and node.parent_id:
+        if node.parent_id in seen:
+            return False
+        seen.add(node.parent_id)
+        if node.parent_id == ancestor_id:
+            return True
+        node = db.query(FileFolder).filter(FileFolder.id == node.parent_id).first()
+    return False
+
+
+def _build_file_folder_tree(db, parent_id=None):
+    folders = db.query(FileFolder).filter(FileFolder.parent_id == parent_id).order_by(FileFolder.name).all()
+    return [
+        {
+            "id": f.id,
+            "name": f.name,
+            "parent_id": f.parent_id,
+            "created_at": f.created_at,
+            "files": [
+                {
+                    "id": file.id,
+                    "filename": file.original_filename,
+                    "size": file.size,
+                    "file_folder_id": file.file_folder_id,
+                    "created_at": file.created_at,
+                }
+                for file in f.files
+            ],
+            "children": _build_file_folder_tree(db, f.id),
+        }
+        for f in folders
+    ]
+
+
+@router.get("/file-folders")
+def list_file_folders(db: Session = Depends(get_db)):
+    """List file folders as a nested tree."""
+    return _build_file_folder_tree(db)
+
+
+@router.post("/file-folders")
+def create_file_folder(data: FileFolderCreate, db: Session = Depends(get_db)):
+    """Create a new file folder."""
+    folder = FileFolder(name=data.name, parent_id=data.parent_id)
+    db.add(folder)
+    db.commit()
+    db.refresh(folder)
+    return {"id": folder.id, "name": folder.name, "parent_id": folder.parent_id,
+            "created_at": folder.created_at, "files": [], "children": []}
+
+
+@router.patch("/file-folders/{folder_id}")
+def update_file_folder(folder_id: str, data: dict, db: Session = Depends(get_db)):
+    """Move a file folder (set parent_id; null = root)."""
+    folder = db.query(FileFolder).filter(FileFolder.id == folder_id).first()
+    if not folder:
+        raise HTTPException(status_code=404, detail="File folder not found")
+    if "parent_id" in data:
+        new_parent = data["parent_id"]
+        if new_parent is not None:
+            if new_parent == folder_id:
+                raise HTTPException(status_code=400, detail="Cannot move a folder into itself")
+            if _file_folder_is_descendant(db, folder_id, new_parent):
+                raise HTTPException(status_code=400, detail="Cannot move a folder into its own descendant")
+        folder.parent_id = new_parent
+    if "name" in data:
+        folder.name = data["name"]
+    db.commit()
+    return {"id": folder.id, "name": folder.name, "parent_id": folder.parent_id}
+
+
+@router.delete("/file-folders/{folder_id}")
+def delete_file_folder(folder_id: str, db: Session = Depends(get_db)):
+    """Delete a file folder. Files become unfoldered; child folders move to this folder's parent."""
+    folder = db.query(FileFolder).filter(FileFolder.id == folder_id).first()
+    if not folder:
+        raise HTTPException(status_code=404, detail="File folder not found")
+    parent_id = folder.parent_id
+
+    # Bulk updates before delete so ORM cascade doesn't nullify our changes
+    db.query(UploadedFile).filter(UploadedFile.file_folder_id == folder_id).update(
+        {"file_folder_id": None}, synchronize_session="evaluate"
+    )
+    db.query(FileFolder).filter(FileFolder.parent_id == folder_id).update(
+        {"parent_id": parent_id}, synchronize_session="evaluate"
+    )
+
+    db.delete(folder)
+    db.commit()
+    return {"status": "deleted"}
 
 
 # --- File routes (must come before /{chat_id} to avoid matching "files" as chat_id) ---
@@ -32,10 +129,28 @@ def list_files(db: Session = Depends(get_db)):
             "id": f.id,
             "filename": f.original_filename,
             "size": f.size,
-            "created_at": f.created_at
+            "file_folder_id": f.file_folder_id,
+            "created_at": f.created_at,
         }
         for f in files
     ]
+
+
+@router.patch("/files/{file_id}")
+def update_file(file_id: str, data: dict, db: Session = Depends(get_db)):
+    """Update a file (e.g. move to a folder)."""
+    file = db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+    if "file_folder_id" in data:
+        folder_id = data["file_folder_id"]
+        if folder_id is not None:
+            folder = db.query(FileFolder).filter(FileFolder.id == folder_id).first()
+            if not folder:
+                raise HTTPException(status_code=404, detail="File folder not found")
+        file.file_folder_id = folder_id
+    db.commit()
+    return {"id": file.id, "file_folder_id": file.file_folder_id}
 
 
 @router.post("/files/upload")

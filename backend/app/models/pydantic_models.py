@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Optional, List
 from enum import Enum
@@ -25,12 +25,11 @@ class MessageCreate(MessageBase):
 
 
 class MessageResponse(MessageBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     chat_id: str
     timestamp: datetime
-
-    class Config:
-        from_attributes = True
 
 
 # Chat schemas
@@ -49,25 +48,23 @@ class ChatUpdate(BaseModel):
 
 
 class ChatResponse(ChatBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     created_at: datetime
     updated_at: datetime
     messages: List[MessageResponse] = []
 
-    class Config:
-        from_attributes = True
-
 
 class ChatListResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     title: str
     folder_id: Optional[str]
     created_at: datetime
     updated_at: datetime
     message_count: int = 0
-
-    class Config:
-        from_attributes = True
 
 
 # Folder schemas
@@ -86,12 +83,11 @@ class FolderUpdate(BaseModel):
 
 
 class FolderResponse(FolderBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     created_at: datetime
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 # Context attachment schemas
@@ -102,14 +98,28 @@ class ContextAttachmentCreate(BaseModel):
 
 
 class ContextAttachmentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     chat_id: str
     source_type: SourceType
     source_id: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+
+# File folder schemas
+class FileFolderCreate(BaseModel):
+    name: str
+    parent_id: Optional[str] = None
+
+
+class FileFolderResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    created_at: datetime
+    files: List[dict] = []
 
 
 # Chat request/response for AI

@@ -68,20 +68,38 @@ def get_folder(folder_id: str, db: Session = Depends(get_db)):
     return folder
 
 
+def _is_descendant(db, model, ancestor_id: str, folder_id: str) -> bool:
+    """Return True if ancestor_id is an ancestor of folder_id (cycle detection)."""
+    node = db.query(model).filter(model.id == folder_id).first()
+    seen = set()
+    while node and node.parent_id:
+        if node.parent_id in seen:
+            return False  # already broken cycle
+        seen.add(node.parent_id)
+        if node.parent_id == ancestor_id:
+            return True
+        node = db.query(model).filter(model.id == node.parent_id).first()
+    return False
+
+
 @router.patch("/{folder_id}", response_model=FolderResponse)
 def update_folder(folder_id: str, folder_data: FolderUpdate, db: Session = Depends(get_db)):
-    """Update a folder (rename, move)."""
+    """Update a folder (rename, move). Send parent_id: null to move to root."""
     folder = db.query(Folder).filter(Folder.id == folder_id).first()
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
 
     if folder_data.name is not None:
         folder.name = folder_data.name
-    if folder_data.parent_id is not None:
-        # Prevent moving folder into itself or its descendants
-        if folder_data.parent_id == folder_id:
-            raise HTTPException(status_code=400, detail="Cannot move folder into itself")
-        folder.parent_id = folder_data.parent_id
+
+    if "parent_id" in folder_data.model_fields_set:
+        new_parent = folder_data.parent_id
+        if new_parent is not None:
+            if new_parent == folder_id:
+                raise HTTPException(status_code=400, detail="Cannot move a folder into itself")
+            if _is_descendant(db, Folder, folder_id, new_parent):
+                raise HTTPException(status_code=400, detail="Cannot move a folder into its own descendant")
+        folder.parent_id = new_parent
 
     db.commit()
     db.refresh(folder)
@@ -95,13 +113,16 @@ def delete_folder(folder_id: str, db: Session = Depends(get_db)):
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
 
-    # Move chats to root
-    for chat in folder.chats:
-        chat.folder_id = None
+    parent_id = folder.parent_id
 
-    # Move child folders to parent
-    for child in folder.children:
-        child.parent_id = folder.parent_id
+    # Bulk updates before delete so ORM cascade doesn't nullify our changes
+    from ..models.schemas import Chat as ChatModel
+    db.query(ChatModel).filter(ChatModel.folder_id == folder_id).update(
+        {"folder_id": None}, synchronize_session="evaluate"
+    )
+    db.query(Folder).filter(Folder.parent_id == folder_id).update(
+        {"parent_id": parent_id}, synchronize_session="evaluate"
+    )
 
     db.delete(folder)
     db.commit()
