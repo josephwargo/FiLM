@@ -10,6 +10,7 @@ export interface Chat {
   id: string;
   title: string;
   folder_id: string | null;
+  muse_id: string | null;
   created_at: string;
   updated_at: string;
   messages: Message[];
@@ -19,9 +20,26 @@ export interface ChatListItem {
   id: string;
   title: string;
   folder_id: string | null;
+  muse_id: string | null;
   created_at: string;
   updated_at: string;
   message_count: number;
+}
+
+export interface Muse {
+  id: string;
+  name: string;
+  description: string | null;
+  system_prompt: string;
+  created_at: string;
+}
+
+export interface MuseContext {
+  id: string;
+  muse_id: string;
+  source_type: 'chat' | 'file';
+  source_id: string;
+  created_at: string;
 }
 
 export interface Folder {

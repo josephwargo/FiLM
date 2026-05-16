@@ -14,9 +14,13 @@ class GeminiService:
         self.client = genai.Client(api_key=GEMINI_API_KEY)
         self.model_name = "gemini-2.0-flash"
 
-    def generate_response(self, message: str, history: List[dict] = None, context: str = None) -> str:
-        """Generate a response from Gemini."""
-        # Build history in new format
+    def generate_response(
+        self,
+        message: str,
+        history: List[dict] = None,
+        context: str = None,
+        system_prompt: str = None,
+    ) -> str:
         chat_history = []
         if history:
             for msg in history:
@@ -25,7 +29,6 @@ class GeminiService:
                     types.Content(role=role, parts=[types.Part(text=msg["content"])])
                 )
 
-        # Build the prompt with context if provided
         prompt = message
         if context:
             prompt = f"""Use the following context to help answer the question:
@@ -36,8 +39,8 @@ class GeminiService:
 
 User question: {message}"""
 
-        # Create chat with history and send message
-        chat = self.client.chats.create(model=self.model_name, history=chat_history)
+        config = types.GenerateContentConfig(system_instruction=system_prompt) if system_prompt else None
+        chat = self.client.chats.create(model=self.model_name, history=chat_history, config=config)
         response = chat.send_message(prompt)
 
         return response.text
@@ -46,10 +49,9 @@ User question: {message}"""
         self,
         message: str,
         history: List[dict] = None,
-        context: str = None
+        context: str = None,
+        system_prompt: str = None,
     ) -> AsyncGenerator[str, None]:
-        """Generate a streaming response from Gemini."""
-        # Build history in new format
         chat_history = []
         if history:
             for msg in history:
@@ -68,7 +70,8 @@ User question: {message}"""
 
 User question: {message}"""
 
-        chat = self.client.chats.create(model=self.model_name, history=chat_history)
+        config = types.GenerateContentConfig(system_instruction=system_prompt) if system_prompt else None
+        chat = self.client.chats.create(model=self.model_name, history=chat_history, config=config)
         response = chat.send_message_stream(prompt)
 
         for chunk in response:

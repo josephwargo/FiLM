@@ -49,6 +49,14 @@ The RAG system lets users attach past chats and uploaded files as context to any
 - Sections: Current Context (drop zone), Chat Folders, Unfiled Chats, File Folders, Unfiled Files
 - "Chat Folders" section in the context panel mirrors the sidebar's folder tree for easy selection
 
+**Recursive context loading (new)**
+- When a chat is attached as context, its own context attachments are also resolved and injected — not just its message transcript
+- This applies transitively: if Chat B has a file and Chat C attached, attaching Chat B pulls in Chat B's transcript + the file content + Chat C's transcript (and so on)
+- Cycle detection via a shared `visited` set: a chat ID is never injected more than once per prompt, regardless of how many times it appears in the attachment tree
+- The current chat itself is added to `visited` at the start, so a chat can never recurse into itself
+- Max recursion depth: 3 (configurable via `MAX_CONTEXT_DEPTH` in `routers/chats.py`)
+- The same `visited` set is shared between Muse pinned context and per-chat context, so a chat pinned to both never appears twice
+
 ### Out of Scope (v1)
 - Web page / URL ingestion
 - Auto-suggested context based on chat topic

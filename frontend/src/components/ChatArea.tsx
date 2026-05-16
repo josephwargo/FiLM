@@ -3,6 +3,7 @@ import { Send, Loader2, User, Bot } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import { useChatStore } from '../store/chatStore';
+import { MusePicker } from './MusePicker';
 
 const MD_PLUGINS = [rehypeHighlight];
 
@@ -75,6 +76,7 @@ export function ChatArea() {
     <div className="chat-area">
       <div className="chat-header">
         <h2>{currentChat.title}</h2>
+        <MusePicker />
       </div>
 
       <div className="chat-messages">

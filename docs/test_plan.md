@@ -2,7 +2,7 @@
 
 **Part of:** [FiLM Master PRD](Master_PRD.md)
 **Test type:** API integration tests (pytest + FastAPI TestClient)
-**Last updated:** 2026-05-10
+**Last updated:** 2026-05-16
 
 ---
 
@@ -89,6 +89,37 @@ Tests use an isolated SQLite DB (`tests/test_film.db`) and mock all external cal
 | CTX-013 | Prevent file folder cycle | P0 | Regression | Move ancestor folder into descendant | 400 |
 | CTX-014 | Move file to folder | P1 | Integration | PATCH /api/context/files/:id with `file_folder_id` | `file_folder_id` updated in response |
 | CTX-015 | Delete folder promotes children | P1 | Integration | DELETE middle folder in 3-level tree | Grandchildren promoted to grandparent |
+| CTX-016 | Recursive: sub-attachments pulled in | P0 | Smoke | Attach Chat B (which has a file) to Chat A; send message from A | File attached to B appears in resolved context |
+| CTX-017 | Circular reference doesn't loop | P0 | Regression | Attach A→B and B→A; send from A | Request completes (no infinite loop) |
+| CTX-018 | Current chat excluded from own context | P0 | Regression | Attach a chat to itself; send message | Request completes (no self-injection) |
+| CTX-019 | Shared chat not duplicated across Muse + per-chat | P1 | Regression | Same chat pinned to Muse and attached per-chat | Chat transcript appears exactly once in LLM context |
+
+---
+
+## Suite 4 — Muses
+*PRD: [muses_PRD.md](products/muses_PRD.md)*
+*File: `backend/tests/test_muses.py`*
+
+| ID | Test Name | Priority | Type | Description | Expected Result |
+|----|-----------|----------|------|-------------|-----------------|
+| MUSE-001 | Create Muse | P0 | Smoke | POST /api/muses with name, description, system_prompt | 200, all fields in response |
+| MUSE-002 | Create Muse without description | P1 | Smoke | POST /api/muses omitting description | 200, description is null |
+| MUSE-003 | List Muses | P0 | Smoke | GET /api/muses after creating two | Both names present |
+| MUSE-004 | Get Muse by id | P0 | Smoke | GET /api/muses/:id | 200, correct id |
+| MUSE-005 | Get nonexistent Muse | P0 | Regression | GET /api/muses/bad-id | 404 |
+| MUSE-006 | Update Muse | P1 | Integration | PATCH /api/muses/:id with new name + system_prompt | Response reflects updated values |
+| MUSE-007 | Delete Muse | P1 | Integration | DELETE /api/muses/:id | Muse absent from subsequent list |
+| MUSE-008 | Delete Muse unassigns chats | P0 | Regression | Delete a Muse used by a chat | Chat's muse_id becomes null |
+| MUSE-009 | Assign Muse to chat | P0 | Smoke | PATCH /api/chats/:id with muse_id | muse_id persisted on chat |
+| MUSE-010 | Clear Muse from chat | P1 | Integration | PATCH /api/chats/:id with muse_id: "" | muse_id becomes null |
+| MUSE-011 | System prompt injected on send | P0 | Smoke | Send message in Muse-assigned chat | system_prompt passed to LLM equals Muse's system_prompt |
+| MUSE-012 | No system prompt without Muse | P1 | Regression | Send message with no Muse assigned | system_prompt passed to LLM is null |
+| MUSE-013 | Pin chat as Muse context | P0 | Smoke | POST /api/muses/:id/context (source_type: chat) | 200; appears in GET /api/muses/:id/context |
+| MUSE-014 | Pin file as Muse context | P0 | Smoke | POST /api/muses/:id/context (source_type: file) | 200; appears in context list |
+| MUSE-015 | Pin context is idempotent | P1 | Regression | Pin same source twice | Second call returns same record; list has 1 entry |
+| MUSE-016 | Unpin Muse context | P1 | Integration | DELETE /api/muses/:id/context/:ctx_id | Item absent from context list |
+| MUSE-017 | Pin context to nonexistent Muse | P0 | Regression | POST /api/muses/bad-id/context | 404 |
+| MUSE-018 | Muse pinned context in LLM call | P0 | Smoke | Muse has file pinned; send message from assigned chat | File name appears in context string passed to LLM |
 
 ---
 
@@ -96,7 +127,7 @@ Tests use an isolated SQLite DB (`tests/test_film.db`) and mock all external cal
 
 | Gate | Requirement |
 |------|-------------|
-| **Ship** | All P0 tests pass (15 tests) |
+| **Ship** | All P0 tests pass (27 P0 tests across all suites) |
 | **Ship with caveats** | All P0 pass; any P1 failures documented as known issues |
 | **Do not ship** | Any P0 failure |
 
@@ -118,7 +149,7 @@ Tests use an isolated SQLite DB (`tests/test_film.db`) and mock all external cal
 ## Adding New Tests
 
 When a new feature is built:
-1. Add test cases to the appropriate file (`test_chats.py`, `test_folders.py`, or `test_context.py`)
-2. Assign the next ID in sequence (e.g., CHAT-011)
+1. Add test cases to the appropriate file (`test_chats.py`, `test_folders.py`, `test_context.py`, or `test_muses.py`)
+2. Assign the next ID in sequence (e.g., MUSE-019, CTX-020)
 3. Add a row to the corresponding table above
 4. Mark priority based on: P0 if a regression would break the UI for any user, P1 if it degrades a named feature, P2 otherwise

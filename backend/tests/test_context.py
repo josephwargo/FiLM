@@ -2,8 +2,9 @@
 CTX — RAG / Context System test suite
 Maps to: docs/products/rag_context_PRD.md
 
-Test IDs: CTX-001 … CTX-015
+Test IDs: CTX-001 … CTX-019
 """
+from unittest.mock import patch, MagicMock
 import io
 
 
@@ -234,3 +235,118 @@ def test_delete_file_folder_promotes_children(client):
     assert gp_node is not None
     child_ids = [c["id"] for c in gp_node["children"]]
     assert child["id"] in child_ids
+
+
+# ── CTX-016 ───────────────────────────────────────────────────────────────────
+
+def test_recursive_chat_context_pulls_sub_attachments(client):
+    """CTX-016 [P0 smoke]: Attaching a chat also pulls in that chat's own file attachments."""
+    captured = {}
+
+    def fake_generate(message, history, context=None, system_prompt=None):
+        captured["context"] = context
+        return "Mock response"
+
+    mock_gemini = MagicMock()
+    mock_gemini.generate_response.side_effect = fake_generate
+
+    # Chat B has a file attached
+    file_id = client.post(
+        "/api/context/files/upload",
+        files={"file": ("deep.txt", b"deep content", "text/plain")},
+    ).json()["id"]
+    chat_b_id = client.post("/api/chats", json={"title": "Chat B"}).json()["id"]
+    client.post(
+        "/api/context/attach",
+        json={"chat_id": chat_b_id, "source_type": "file", "source_id": file_id},
+    )
+
+    # Chat A attaches Chat B
+    chat_a_id = client.post("/api/chats", json={"title": "Chat A"}).json()["id"]
+    client.post(
+        "/api/context/attach",
+        json={"chat_id": chat_a_id, "source_type": "chat", "source_id": chat_b_id},
+    )
+
+    with patch("app.routers.chats.gemini_service", mock_gemini):
+        client.post(f"/api/chats/{chat_a_id}/messages", json={"message": "Hello"})
+
+    # The file attached to Chat B should appear in Chat A's resolved context
+    assert captured.get("context") is not None
+    assert "deep.txt" in captured["context"]
+
+
+# ── CTX-017 ───────────────────────────────────────────────────────────────────
+
+def test_circular_context_reference_does_not_loop(client):
+    """CTX-017 [P0 regression]: A circular chat attachment (A→B→A) does not cause infinite recursion."""
+    chat_a_id = client.post("/api/chats", json={"title": "Chat A"}).json()["id"]
+    chat_b_id = client.post("/api/chats", json={"title": "Chat B"}).json()["id"]
+    client.post(
+        "/api/context/attach",
+        json={"chat_id": chat_a_id, "source_type": "chat", "source_id": chat_b_id},
+    )
+    client.post(
+        "/api/context/attach",
+        json={"chat_id": chat_b_id, "source_type": "chat", "source_id": chat_a_id},
+    )
+    # Sending a message must complete without hanging or raising an exception
+    r = client.post(f"/api/chats/{chat_a_id}/messages", json={"message": "Hello"})
+    assert r.status_code == 200
+
+
+# ── CTX-018 ───────────────────────────────────────────────────────────────────
+
+def test_current_chat_excluded_from_own_context(client):
+    """CTX-018 [P0 regression]: A chat cannot inject its own transcript as context (no self-reference)."""
+    chat_id = client.post("/api/chats", json={"title": "Self Chat"}).json()["id"]
+    client.post(
+        "/api/context/attach",
+        json={"chat_id": chat_id, "source_type": "chat", "source_id": chat_id},
+    )
+    r = client.post(f"/api/chats/{chat_id}/messages", json={"message": "Hello"})
+    assert r.status_code == 200
+
+
+# ── CTX-019 ───────────────────────────────────────────────────────────────────
+
+def test_shared_chat_not_duplicated_across_muse_and_per_chat(client):
+    """CTX-019 [P1 regression]: A chat pinned to both a Muse and the per-chat context appears only once."""
+    captured = {}
+
+    def fake_generate(message, history, context=None, system_prompt=None):
+        captured["context"] = context
+        return "Mock response"
+
+    mock_gemini = MagicMock()
+    mock_gemini.generate_response.side_effect = fake_generate
+
+    # Shared source chat
+    source_id = client.post("/api/chats", json={"title": "Shared Source"}).json()["id"]
+    # Give it a message so it produces a transcript
+    client.post(f"/api/chats/{source_id}/messages", json={"message": "Source content"})
+
+    # Create and configure muse with source pinned
+    muse_id = client.post(
+        "/api/muses",
+        json={"name": "Test Muse", "system_prompt": "Be helpful."},
+    ).json()["id"]
+    client.post(
+        f"/api/muses/{muse_id}/context",
+        json={"source_type": "chat", "source_id": source_id},
+    )
+
+    # Create target chat with the muse AND the same source chat attached
+    chat_id = client.post("/api/chats", json={"title": "Target"}).json()["id"]
+    client.patch(f"/api/chats/{chat_id}", json={"muse_id": muse_id})
+    client.post(
+        "/api/context/attach",
+        json={"chat_id": chat_id, "source_type": "chat", "source_id": source_id},
+    )
+
+    with patch("app.routers.chats.gemini_service", mock_gemini):
+        client.post(f"/api/chats/{chat_id}/messages", json={"message": "Go"})
+
+    ctx = captured.get("context") or ""
+    # "Shared Source" header should appear exactly once
+    assert ctx.count("Shared Source") == 1

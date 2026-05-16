@@ -110,9 +110,32 @@ FiLM uses **Gemini 2.0 Flash**. Every message is a fresh API call — Gemini is 
 
 When you save a message or upload a file, FiLM converts the text into ~384 numbers using **all-MiniLM-L6-v2** — a small model that runs entirely on your machine, no API call. These numbers encode the *meaning* of the text and are stored in ChromaDB. This is what makes semantic search possible (finding content by meaning, not just keywords). The search capability is built in and wired up — automatic retrieval is a planned enhancement.
 
+### How Muses work
+
+A Muse is a named AI personality you create and assign to a chat. You give it a name, an optional description, and a **system prompt** — a set of instructions that shapes how the AI responds in that chat (its tone, role, constraints, etc.).
+
+When a chat has a Muse assigned, the system prompt is injected into every Gemini call for that chat via Gemini's native system instruction channel. Switching or removing the Muse takes effect on the next message. Muses are reusable — one Muse can be applied to many different chats.
+
+The MusePicker lives in the chat header. Click it to assign a Muse, create a new one, or edit/delete existing ones.
+
 ### What "RAG" means
 
 RAG = Retrieval-Augmented Generation. Before sending your question to the AI, add relevant background to the prompt. In FiLM you do the retrieval manually — you pick which chats and files to attach. A future version will surface relevant context automatically.
+
+---
+
+## Troubleshooting
+
+**"GEMINI_API_KEY not found"**
+- Make sure a `.env` file exists in `backend/` (not the project root)
+- Key must be unquoted: `GEMINI_API_KEY=your_key` not `GEMINI_API_KEY="your_key"`
+
+**ChromaDB errors on startup**
+- Delete `backend/chroma_data/` and restart — this resets the vector store with no data loss (embeddings are regenerated from SQLite on next upload/message)
+
+**Port already in use**
+- Backend: add `--port 8001` to the uvicorn command and update the proxy target in `vite.config.ts`
+- Frontend: Vite auto-increments to the next available port
 
 ---
 
@@ -139,7 +162,7 @@ RAG = Retrieval-Augmented Generation. Before sending your question to the AI, ad
 - [x] Virtual file system — chat folders with unlimited nesting
 - [x] RAG context system — attach chats and files as context
 - [x] File folders — organize uploaded files, attach entire folders at once
-- [x] API test suite (35 tests)
+- [x] API test suite (57 tests — chats, folders, context, Muses, recursive context)
+- [x] Muses — custom AI personalities with their own system prompts, assignable per chat
 - [ ] Chat slicing — attach only a portion of a chat's history
-- [ ] Personas — custom AI personas with their own system prompts
 - [ ] Search across all chats

@@ -31,7 +31,7 @@ export const chatsAPI = {
       body: JSON.stringify(data),
     }),
 
-  update: (chatId: string, data: { title?: string; folder_id?: string }) =>
+  update: (chatId: string, data: { title?: string; folder_id?: string; muse_id?: string }) =>
     fetchAPI<any>(`/chats/${chatId}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
@@ -168,4 +168,36 @@ export const contextAPI = {
 
     return response.json();
   },
+};
+
+// Muses
+export const musesAPI = {
+  list: () => fetchAPI<any[]>('/muses'),
+
+  create: (data: { name: string; description?: string; system_prompt: string }) =>
+    fetchAPI<any>('/muses', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  update: (museId: string, data: { name?: string; description?: string; system_prompt?: string }) =>
+    fetchAPI<any>(`/muses/${museId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  delete: (museId: string) =>
+    fetchAPI<any>(`/muses/${museId}`, { method: 'DELETE' }),
+
+  getContext: (museId: string) =>
+    fetchAPI<any[]>(`/muses/${museId}/context`),
+
+  pinContext: (museId: string, data: { source_type: 'chat' | 'file'; source_id: string }) =>
+    fetchAPI<any>(`/muses/${museId}/context`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  unpinContext: (museId: string, contextId: string) =>
+    fetchAPI<any>(`/muses/${museId}/context/${contextId}`, { method: 'DELETE' }),
 };

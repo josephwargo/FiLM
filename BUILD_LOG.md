@@ -562,124 +562,358 @@ pypdf==5.1.0  # Added for PDF text extraction
 
 ---
 
+## Session 3 — File Folders + Context Panel UX
+
+### New Features
+
+1. **File Folders** (`app/routers/context.py`, `FileFolder` model)
+   - New `FileFolder` SQLAlchemy model with self-referential `parent_id` for unlimited nesting
+   - New endpoints: `GET/POST /api/context/file-folders`, `PATCH /api/context/file-folders/:id`, `DELETE /api/context/file-folders/:id`
+   - `DELETE` promotes child folders to the grandparent and leaves files unfiled — nothing is deleted
+   - `_file_folder_is_descendant()` helper prevents cycle creation on nest operations
+   - `file_folder_id` column added to `UploadedFile` via `ALTER TABLE IF NOT EXISTS` migration at startup
+
+2. **Folder-level context attach**
+   - Attaching a file folder recursively collects all files in it and its subfolders and attaches each individually
+   - Frontend `collectFileFolderFiles(folder)` recursive helper drives bulk-attach
+
+3. **Context Panel UX overhaul**
+   - Panel is now collapsible: collapses to a 40 px icon strip on the right edge
+   - Left-edge drag handle resizes the panel (min/max width enforced)
+   - Indigo/purple palette (`--ctx-accent: #6366f1`) makes it visually distinct from the sidebar's red palette
+   - Sections reorganized: Current Context drop zone → Chat Folders → Unfiled Chats → File Folders → Unfiled Files
+   - "Chat Folders" section mirrors the sidebar folder tree for easy chat selection
+   - Unattached-count badge on folders/subfolders shows how many items are not yet attached
+
+4. **Sidebar UX improvements**
+   - Sidebar also made collapsible (collapses to icon strip) with drag-to-resize
+   - Drag-and-drop for nesting folders (folder into folder) with cycle detection
+
+5. **Drag disambiguation**
+   - `dataTransfer` now uses explicit keys `contextType` + `contextId` to distinguish file drags from file-folder drags on shared drop targets
+
+### Backend Files Modified
+- `app/models/schemas.py` — Added `FileFolder` model; added `file_folder_id` FK to `UploadedFile`
+- `app/models/pydantic_models.py` — Added `FileFolderCreate`, `FileFolderUpdate`, `FileFolderResponse` + `file_folder_id` to file models
+- `app/routers/context.py` — File folder CRUD endpoints; `_file_folder_is_descendant()` cycle guard; recursive file collection for folder-attach
+- `main.py` — Added `ALTER TABLE` migrations for `file_folder_id` and `parent_id` columns
+
+### Frontend Files Modified
+- `src/components/ContextPanel.tsx` — Full rewrite for new UX: collapsible, resizable, folder tree, file folders, unattached badges
+- `src/components/Sidebar.tsx` — Collapsible, resizable, folder nesting drag & drop
+- `src/services/api.ts` — Added file folder API methods
+- `src/store/chatStore.ts` — Added `fileFolders`, `loadFileFolders`, folder CRUD actions
+- `src/types/index.ts` — Added `FileFolder`, `FolderTreeItem` (extended with files + children)
+- `src/App.css` — Collapsible/resizable panel styles, indigo context palette, folder badge styles
+
+---
+
+## Session 4 — Recursive Context + Test Suite + Documentation
+
+### New Features
+
+1. **Recursive context loading** (`app/routers/chats.py`)
+   - When a chat is attached as context, its own `ContextAttachment` records are also resolved — not just its transcript
+   - `_build_context_parts(db, pairs, visited, depth)` replaces the old inline context block in both send endpoints
+   - `_resolve_context(db, chat)` single entry point that loads Muse pinned context first, then per-chat context
+   - Shared `visited: Set[str]` pre-seeded with `chat.id` prevents: self-reference, cross-branch duplication, and infinite cycles
+   - `MAX_CONTEXT_DEPTH = 3` constant caps recursion
+   - Both `send_message` and `send_message_stream` refactored to call `_resolve_context`
+
+2. **API test suite** (`backend/tests/`)
+   - `conftest.py` — shared fixtures: `reset_db` (autouse, drops/creates tables per test), `client` (TestClient with DB override + mocked Gemini + mocked ChromaDB)
+   - `test_chats.py` — CHAT-001 to CHAT-010 (10 tests): CRUD, message send, streaming SSE
+   - `test_folders.py` — FS-001 to FS-010 (10 tests): folder CRUD, nesting, cycle detection, tree structure
+   - `test_context.py` — CTX-001 to CTX-015 (15 tests): file upload, attach/detach, file folders, nesting, cycle detection
+   - Total: **35 tests**, all passing
+
+3. **Documentation restructure** (`docs/`)
+   - `docs/Master_PRD.md` — Vision, problem, target user, product table, architecture, design principles
+   - `docs/products/chat_interface_PRD.md` — Chat feature PRD
+   - `docs/products/file_system_PRD.md` — Virtual file system PRD
+   - `docs/products/rag_context_PRD.md` — RAG/context system PRD (includes recursive context section)
+   - `docs/products/chat_slicing_PRD.md` — Planned feature PRD
+   - `docs/products/muses_PRD.md` — Muses PRD (renamed from personas_PRD.md)
+   - `docs/test_plan.md` — Full test inventory with priorities, run instructions
+   - `SETUP.md` — Quick-start setup guide
+
+### Backend Files Modified
+- `app/routers/chats.py` — Extracted `_build_context_parts()` + `_resolve_context()`; both send endpoints now use shared helpers
+
+---
+
+## Session 5 — Muses Feature (Full Implementation)
+
+### Overview
+Muses are named AI personalities that users create once and reuse across chats. Each Muse has a name, description, system prompt, and optionally pinned context (files and past chats that are always included when the Muse is active).
+
+### Backend
+
+1. **`Muse` + `MuseContext` models** (`app/models/schemas.py`)
+   - `Muse`: `id`, `name`, `description`, `system_prompt`, `created_at`; `chats` and `pinned_context` relationships
+   - `MuseContext`: `id`, `muse_id` (FK → Muse, cascade delete), `source_type` (enum: chat|file), `source_id`, `created_at`
+   - `Chat` gains `muse_id` FK → `Muse`
+   - `main.py` migration: `ALTER TABLE chats ADD COLUMN muse_id VARCHAR REFERENCES muses(id)` + `CREATE TABLE IF NOT EXISTS muse_contexts (...)`
+
+2. **`muses.py` router** (`app/routers/muses.py`) — new file
+   - `GET/POST /api/muses` — list + create
+   - `GET /api/muses/:id` — get
+   - `PATCH /api/muses/:id` — update name/description/system_prompt
+   - `DELETE /api/muses/:id` — delete + unassign from all chats
+   - `GET /api/muses/:id/context` — list pinned context
+   - `POST /api/muses/:id/context` — pin a file or chat (idempotent — returns existing if duplicate)
+   - `DELETE /api/muses/:id/context/:ctx_id` — unpin
+
+3. **Gemini service** (`app/services/gemini_service.py`)
+   - Both `generate_response` and `generate_response_stream` accept `system_prompt: str = None`
+   - When set: `config = types.GenerateContentConfig(system_instruction=system_prompt)`; passed to `client.chats.create(..., config=config)`
+
+4. **`_resolve_context` updated** (`app/routers/chats.py`)
+   - If `chat.muse_id` is set, loads the Muse, extracts `system_prompt`, queries `MuseContext`, resolves pinned pairs via `_build_context_parts` — prepended before per-chat context
+   - Same `visited` set shared across Muse + per-chat context so no chat appears twice
+
+### Frontend
+
+1. **Types** (`src/types/index.ts`) — Added `Muse`, `MuseContext` interfaces; `muse_id: string | null` on `Chat` and `ChatListItem`
+
+2. **API** (`src/services/api.ts`) — Added `musesAPI`: `list`, `create`, `update`, `delete`, `getContext`, `pinContext`, `unpinContext`
+
+3. **Store** (`src/store/chatStore.ts`) — Added `muses: Muse[]`, `loadMuses`, `setMuse`, `createMuse`, `updateMuse`, `deleteMuse`
+
+4. **`MusePicker.tsx`** — new component in chat header; dropdown to assign/create/edit/delete Muses for the active chat
+
+5. **`MuseLibrary.tsx`** — new full-screen view; three-column layout:
+   - Left: Muse list sidebar with "New Muse" button
+   - Middle: Muse Editor (name, description, system prompt fields + pinned context drop zone)
+   - Right: Draggable source panel — `DraggableChat` (sets `chatId`), `DraggableFile` (sets `contextType:'file'` + `contextId`), `FolderNode` (collapsible recursive folder tree)
+   - Drop handler reads same `dataTransfer` keys as existing sidebar/context panel drag system
+   - Right panel dims (`opacity: 0.7`) when no saved Muse is selected; text forced to `#fff` to maintain contrast against dark blue background
+
+6. **`App.tsx`** — Added `view: 'chat' | 'muse-library'` state; topbar "Muses" button toggles views; `loadMuses()` called on mount
+
+7. **`App.css`** — Topbar nav button styles (`.topbar-nav-btn`, `.topbar-nav-btn-active`); full MuseLibrary layout + source panel styles
+
+### Bug Fixes
+- **Streaming endpoint lost context block** — When editing the streaming send endpoint, the per-chat context loading block was accidentally deleted. Fixed by restoring the full block inside `_resolve_context`.
+- **Contrast issue (4 rounds)** — Right-hand source panel text was nearly invisible against dark blue background. Root cause: `opacity: 0.35` on the dimmed panel made `#eaeaea` text appear as `rgb(96, 96, 96)`. Fixed by raising to `opacity: 0.7` and switching all source panel text to explicit `#fff`.
+
+---
+
+## Session 6 — Test Suite Expansion + Documentation Cleanup
+
+### New Tests
+
+1. **`backend/tests/test_muses.py`** — 18 new tests (MUSE-001 to MUSE-018):
+   - CRUD operations (create, list, get, update, delete)
+   - 404 regression cases (get/pin to nonexistent Muse)
+   - Chat assignment (assign Muse, clear Muse)
+   - System prompt injection — patches `gemini_service.generate_response` with `side_effect` to capture `system_prompt` argument
+   - Pinned context (pin chat, pin file, idempotency, unpin, 404)
+   - End-to-end: Muse pinned file context appears in LLM call
+
+2. **`backend/tests/test_context.py`** — 4 new tests (CTX-016 to CTX-019):
+   - CTX-016: Recursive sub-attachment — file attached to Chat B appears in Chat A's context when B is attached to A
+   - CTX-017: Circular reference (A→B→A) completes without hanging
+   - CTX-018: Self-reference (chat attached to itself) completes without error
+   - CTX-019: Chat pinned to both Muse and per-chat context appears exactly once in LLM context string
+
+3. **Total: 57 tests**, all passing
+
+### Documentation Updates
+- `docs/test_plan.md` — CTX-016 to CTX-019 added to Suite 3 table; Suite 4 (Muses, 18 tests) added; P0 gate count updated to 27; "Adding New Tests" section updated
+- `README.md` — Test count updated to "57 tests"; troubleshooting section added (GEMINI_API_KEY, ChromaDB reset, port conflicts)
+- `ACTION_ITEMS.md` — Deleted (setup content now fully covered in README.md)
+- `product_requirements.md` — Deleted (all content superseded by `docs/` PRD structure)
+
+### File Structure (current)
+
+```
+film/
+├── README.md
+├── BUILD_LOG.md
+├── SETUP.md
+├── backend/
+│   ├── main.py
+│   ├── package_requirements.txt
+│   ├── .env
+│   ├── film.db
+│   ├── chroma_data/
+│   ├── uploads/
+│   ├── app/
+│   │   ├── models/
+│   │   │   ├── database.py
+│   │   │   ├── schemas.py          # Chat, Message, Folder, ContextAttachment,
+│   │   │   │                       # UploadedFile, FileFolder, Muse, MuseContext
+│   │   │   └── pydantic_models.py
+│   │   ├── routers/
+│   │   │   ├── chats.py            # send_message, send_message_stream,
+│   │   │   │                       # _build_context_parts, _resolve_context
+│   │   │   ├── folders.py
+│   │   │   ├── context.py          # files, file-folders, attach/detach
+│   │   │   └── muses.py            # Muse CRUD + pinned context endpoints
+│   │   └── services/
+│   │       ├── gemini_service.py   # system_prompt support
+│   │       └── chroma_service.py
+│   └── tests/
+│       ├── conftest.py
+│       ├── test_chats.py           # CHAT-001 to CHAT-010
+│       ├── test_folders.py         # FS-001 to FS-010
+│       ├── test_context.py         # CTX-001 to CTX-019
+│       └── test_muses.py           # MUSE-001 to MUSE-018
+└── frontend/src/
+    ├── App.tsx                     # view state: 'chat' | 'muse-library'
+    ├── App.css
+    ├── components/
+    │   ├── Sidebar.tsx
+    │   ├── ChatArea.tsx
+    │   ├── ContextPanel.tsx
+    │   ├── MusePicker.tsx          # chat header Muse selector
+    │   └── MuseLibrary.tsx         # full-screen Muse editor
+    ├── services/api.ts             # musesAPI added
+    ├── store/chatStore.ts          # muses state + actions
+    └── types/index.ts              # Muse, MuseContext types
+```
+
+---
+
 ## Chat Transcript
 
-The following is the complete conversation that led to building this MVP:
+The following is the complete conversation across all build sessions.
 
 ---
 
-### User
-hey, can you first open this directory for me in vscode?
+### Session 1 (January 19, 2026) — Initial MVP
 
-### Assistant
-Done. VS Code should now be opening with the current directory.
+**User:** hey, can you first open this directory for me in vscode?
 
----
-
-### User
-thank you. can you create a markdown file where I can entire the requirements I'll give you to videcode a webapp?
-
-### Assistant
-Done! I've created `requirements.md` with a template structure. You can fill in your requirements under each section.
+**Assistant:** Done. VS Code should now be opening with the current directory.
 
 ---
 
-### User
-Can you research the feasibility of creating a "shell" on top of the Gemini chat app as a 3rd party, where users can log in and access the gemini chat app via a 3rd party web app?
+**User:** thank you. can you create a markdown file where I can entire the requirements I'll give you to videcode a webapp?
 
-### Assistant
-[Conducted web research on Gemini API, terms of service, and OAuth authentication]
-
-**Feasibility Analysis:**
-
-**❌ Wrapping Consumer Gemini App - Not Feasible**
-- Google's ToS prohibits automated access/scraping
-- No official way to programmatically access user sessions
-- Would violate ToS and risk account termination
-
-**✅ Building with Gemini API - Fully Feasible**
-- Official API with free tier (1,500 requests/day)
-- OAuth 2.0 supported
-- Full SDKs available
+**Assistant:** Done! I've created `requirements.md` with a template structure. You can fill in your requirements under each section.
 
 ---
 
-### User
-When you query the Gemini API, can you get the embeddings that are returned so you can store the chat as context? Or does only Google have visibility into this? If the latter, is there an open source LLM that has this functionality?
+**User:** Can you research the feasibility of creating a "shell" on top of the Gemini chat app as a 3rd party, where users can log in and access the gemini chat app via a 3rd party web app?
 
-### Assistant
-[Conducted research on embeddings access]
-
-**Short Answer: No, you can't get internal embeddings from chat responses**
-
-The Gemini API has two separate endpoints:
-1. Chat/Generation endpoint → Returns text only
-2. Embeddings endpoint → Separate call to convert text into vectors
-
-**Open Source Alternatives with Full Access:**
-- LLaMA / Mistral / Qwen (via HuggingFace) - Full hidden state access
-- Ollama - Local inference, can extract embeddings
-- BGE / E5 / Nomic Embed - Dedicated open-source embedding models
+**Assistant:** [Conducted web research] Wrapping the consumer Gemini app is not feasible (ToS violation). Building with the official Gemini API is fully feasible — free tier, 1,500 req/day, OAuth 2.0 supported.
 
 ---
 
-### User
-Are there other options (e.g., does Anthropic allow for this)? After searching that, please tell me: What is the easiest (and cheapest) to build an MVP?
+**User:** When you query the Gemini API, can you get the embeddings that are returned so you can store the chat as context? Or does only Google have visibility into this? If the latter, is there an open source LLM that has this functionality?
 
-### Assistant
-[Conducted research on multiple providers]
-
-**Provider Comparison:**
-| Provider | Embedding API | Hidden States | Cost |
-|----------|--------------|---------------|------|
-| Google Gemini | Separate API | No | Free tier |
-| OpenAI | Separate API | No | $0.02-$0.13/1M |
-| Anthropic | None (use Voyage) | No | N/A |
-| Open Source | Full access | Yes | Free |
-
-**Recommendation for MVP:**
-- **Cheapest:** Gemini free tier + Gemini embeddings + Supabase
-- **Easiest:** Embedchain + Gemini backend
-- **Best balance:** LangChain + Gemini + ChromaDB
+**Assistant:** [Conducted research] No — chat responses return text only. Embeddings require a separate API call. Open-source alternatives (LLaMA, Ollama, BGE) give full hidden-state access but require local compute.
 
 ---
 
-### User
-Can you cross-reference this with my current requirements.md, choose the best option, and create a requirements_v2.md?
+**User:** Are there other options (e.g., does Anthropic allow for this)? After searching that, please tell me: What is the easiest (and cheapest) to build an MVP?
 
-### Assistant
-Created `requirements_v2.md` with:
-- Full architecture diagram
-- Tech stack with justifications (all $0 cost)
-- API endpoints draft
-- Data models
-- UI layout wireframe
-- 4-week development phases
-- Cost estimate: $0-5/month for MVP
+**Assistant:** [Surveyed providers] Best balance for MVP: LangChain + Gemini + ChromaDB — all free, well-documented, minimal setup.
 
 ---
 
-### User
-can you use requirements_v2.md to:
-- start coding the MVP
-- create another markdown that has a list of the action items I need to do to enable the architecture
+**User:** Can you cross-reference this with my current requirements.md, choose the best option, and create a requirements_v2.md?
 
-### Assistant
-Created `ACTION_ITEMS.md` with setup checklist.
-
-Implemented full MVP:
-- Backend: FastAPI with SQLite, ChromaDB, Gemini integration
-- Frontend: React + TypeScript with Vite
-- Features: Chat, folders, context attachments, file upload
+**Assistant:** Created `requirements_v2.md` with architecture, tech stack, API drafts, data models, UI wireframe, and cost estimate ($0).
 
 ---
 
-### User
-this is amazing! thank you. will install the Python dependencies. Before I do that, can you create a comprehensive writeup of the steps you took and the current architecture & file structure, and save it as a new markdown file? Please also include (at the end) the chat transcript
+**User:** can you use requirements_v2.md to start coding the MVP, and create a list of action items I need to do?
 
-### Assistant
-Created this document (`BUILD_LOG.md`).
+**Assistant:** Created `ACTION_ITEMS.md` and implemented the full MVP — FastAPI backend, React + TypeScript frontend, SQLite + ChromaDB + Gemini integration.
 
 ---
 
-*End of transcript*
+**User:** this is amazing! thank you. can you create a comprehensive writeup of the steps you took and the current architecture & file structure, and save it as a new markdown file? Please also include (at the end) the chat transcript
+
+**Assistant:** Created `BUILD_LOG.md` (this document).
+
+---
+
+### Session 2 (January 25, 2026) — Bug Fixes + Drag & Drop
+
+**User:** [Running the app for the first time — encountered several errors]
+
+**Assistant:** Fixed six bugs: TypeScript `verbatimModuleSyntax` import errors, leaked API key in `.env.example`, CORS missing port 5174, SQLite absolute path resolution, `/api/context/files` route ordering (was being matched by `/{chat_id}`), and Gemini SDK `Part.from_text()` API change.
+
+---
+
+**User:** [Continued use — requested new features]
+
+**Assistant:** Added drag & drop for chats into folders, PDF text extraction via `pypdf`, drag & drop context panel with "Current Context" drop zone, and file deletion with confirmation.
+
+---
+
+### Session 3 — File Folders + Context Panel UX
+
+**User:** [Requested file organization and UI improvements]
+
+**Assistant:** Built file folders (unlimited nesting, drag & drop, cycle detection, child-promotion on delete). Overhauled the context panel: collapsible, drag-to-resize, indigo palette, unattached-count badges. Made the sidebar collapsible and drag-to-resize too. Added folder-level context attach (bulk-attaches all files recursively).
+
+---
+
+### Session 4 — Recursive Context + Test Suite + Docs
+
+**User:** When I attach a chat in context or to a Muse, does the chat/Muse inherit the context (files, chats, etc.) of what is being attached to it?
+
+**Assistant:** Not currently — it only includes the transcript. We can make it recursive.
+
+---
+
+**User:** Okay, can we make it 'recursive', please? and update the PRDs to reflect?
+
+**Assistant:** Implemented recursive context loading: `_build_context_parts()` follows a chat's own attachments transitively, up to `MAX_CONTEXT_DEPTH = 3`. Shared `visited` set prevents cycles and de-duplication. Both send endpoints refactored to use the new `_resolve_context()` helper. Updated `rag_context_PRD.md` with the recursive context spec.
+
+---
+
+**User:** [Also requested test suite and docs restructure in this session]
+
+**Assistant:** Created `backend/tests/` with `conftest.py`, `test_chats.py` (10 tests), `test_folders.py` (10 tests), `test_context.py` (15 tests) — 35 total, all passing. Restructured docs into `docs/` with `Master_PRD.md` and individual product PRDs.
+
+---
+
+### Session 5 — Muses Feature
+
+**User:** Thank you. We need to have a page that is a 'Muse editor' where you drag & drop context onto the Muse. Can you update the personas PRD to have this feature so I can review it before we build it? Please also rename Personas to Muses wherever it makes sense.
+
+**Assistant:** Renamed `personas_PRD.md` → `muses_PRD.md`, rewrote it with the full Muse Editor spec: pinned context join table, new API endpoints, drag-and-drop UX, three-column layout wireframe, recursive context pseudocode.
+
+---
+
+**User:** Thank you, let's build it!
+
+**Assistant:** Built the full Muses feature: `Muse` + `MuseContext` SQLAlchemy models, `muses.py` router (CRUD + pinned context endpoints, idempotent pinning), Gemini `system_instruction` injection, `MusePicker.tsx` in the chat header, and `MuseLibrary.tsx` (three-column full-screen editor).
+
+---
+
+**User:** Thank you! In the muse builder, there's no ability to drag-and-drop chats and files into the context. The 'context' dropbox is there, but there's nothing to drop into it.
+
+**Assistant:** Added a right-hand draggable source panel to `MuseLibrary.tsx` with `DraggableChat`, `DraggableFile`, and `FolderNode` components using the same `dataTransfer` key conventions as the existing drag system.
+
+---
+
+**User:** The RHS is still a bit hard to see on the muse builder... [multiple rounds of contrast fixes]
+
+**Assistant:** Root cause: `opacity: 0.35` on the dimmed state made `#eaeaea` text appear as `rgb(96, 96, 96)` against the dark blue `#16213e` background. Fixed by raising dimming to `opacity: 0.7` and switching all source panel text to explicit `#fff`.
+
+---
+
+### Session 6 — Test Suite Expansion + Documentation Cleanup
+
+**User:** We've added a lot of features recently, can we update our test suite to test for the expanded feature set, and update the relevant documentation?
+
+**Assistant:** Created `test_muses.py` with 18 new tests (MUSE-001–018) covering Muse CRUD, system prompt injection, pinned context, and idempotency. Added CTX-016–019 to `test_context.py` for recursive context, cycle detection, self-reference, and de-duplication. Updated `docs/test_plan.md` and README. Total: 57 tests, all passing.
+
+---
+
+**User:** Can we make sure everything in ACTION_ITEMS.md and product_requirements.md is included in our new PRDs, then delete them? Also update the build log with everything since we last updated it?
+
+**Assistant:** Added troubleshooting section to `README.md` (the only content from `ACTION_ITEMS.md` not already covered). Confirmed all `product_requirements.md` content is superseded by `docs/`. Deleted both files. Appended Sessions 3–6 to this build log.
+
+---
+
+**User:** Can you update the chat transcript part of the build log too, and remember to keep that updated with each change?
+
+**Assistant:** Updated this transcript section (you're reading it). Will append to it at the end of every future session.

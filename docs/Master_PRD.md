@@ -22,7 +22,7 @@ Individual power users who use LLMs frequently across multiple projects or topic
 | Virtual File System | Complete | [file_system_PRD.md](products/file_system_PRD.md) |
 | RAG / Context System | Complete | [rag_context_PRD.md](products/rag_context_PRD.md) |
 | Chat Slicing | Planned | [chat_slicing_PRD.md](products/chat_slicing_PRD.md) |
-| Personas | Planned | [personas_PRD.md](products/personas_PRD.md) |
+| Muses | In Progress | [muses_PRD.md](products/muses_PRD.md) |
 
 ## Test Coverage
 
@@ -73,4 +73,4 @@ Storage
 - **Phase 2 — File System:** COMPLETE
 - **Phase 3 — RAG/Context:** COMPLETE
 - **Phase 4 — Polish:** COMPLETE
-- **Phase 5 — Personas:** PLANNED
+- **Phase 5 — Muses:** IN PROGRESS

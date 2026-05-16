@@ -25,6 +25,31 @@ class SourceType(str, enum.Enum):
     FILE = "file"
 
 
+class Muse(Base):
+    __tablename__ = "muses"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    name = Column(String(255), nullable=False)
+    description = Column(String(500), nullable=True)
+    system_prompt = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=_utcnow)
+
+    chats = relationship("Chat", back_populates="muse")
+    pinned_context = relationship("MuseContext", back_populates="muse", cascade="all, delete-orphan")
+
+
+class MuseContext(Base):
+    __tablename__ = "muse_contexts"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    muse_id = Column(String, ForeignKey("muses.id"), nullable=False)
+    source_type = Column(Enum(SourceType), nullable=False)
+    source_id = Column(String, nullable=False)
+    created_at = Column(DateTime, default=_utcnow)
+
+    muse = relationship("Muse", back_populates="pinned_context")
+
+
 class Folder(Base):
     __tablename__ = "folders"
 
@@ -45,11 +70,13 @@ class Chat(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     title = Column(String(255), nullable=False, default="New Chat")
     folder_id = Column(String, ForeignKey("folders.id"), nullable=True)
+    muse_id = Column(String, ForeignKey("muses.id"), nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     # Relationships
     folder = relationship("Folder", back_populates="chats")
+    muse = relationship("Muse", back_populates="chats")
     messages = relationship("Message", back_populates="chat", cascade="all, delete-orphan")
     context_attachments = relationship("ContextAttachment", back_populates="chat", cascade="all, delete-orphan")
 

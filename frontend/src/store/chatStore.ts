@@ -1,12 +1,13 @@
 import { create } from 'zustand';
-import type { Chat, ChatListItem, Message, FolderTreeItem } from '../types';
-import { chatsAPI, foldersAPI } from '../services/api';
+import type { Chat, ChatListItem, Message, FolderTreeItem, Muse } from '../types';
+import { chatsAPI, foldersAPI, musesAPI } from '../services/api';
 
 interface ChatStore {
   // State
   chats: ChatListItem[];
   currentChat: Chat | null;
   folderTree: FolderTreeItem[];
+  muses: Muse[];
   isLoading: boolean;
   isSending: boolean;
   streamingContent: string | null;
@@ -15,14 +16,19 @@ interface ChatStore {
   // Actions
   loadChats: () => Promise<void>;
   loadFolderTree: () => Promise<void>;
+  loadMuses: () => Promise<void>;
   selectChat: (chatId: string) => Promise<void>;
   createChat: (folderId?: string) => Promise<Chat>;
   deleteChat: (chatId: string) => Promise<void>;
   renameChat: (chatId: string, title: string) => Promise<void>;
   moveChat: (chatId: string, folderId: string | null) => Promise<void>;
+  setMuse: (chatId: string, museId: string | null) => Promise<void>;
   sendMessage: (message: string, contextIds?: string[]) => Promise<void>;
   createFolder: (name: string, parentId?: string) => Promise<void>;
   deleteFolder: (folderId: string) => Promise<void>;
+  createMuse: (data: { name: string; description?: string; system_prompt: string }) => Promise<Muse>;
+  updateMuse: (museId: string, data: { name?: string; description?: string; system_prompt?: string }) => Promise<void>;
+  deleteMuse: (museId: string) => Promise<void>;
   clearError: () => void;
 }
 
@@ -30,6 +36,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   chats: [],
   currentChat: null,
   folderTree: [],
+  muses: [],
   isLoading: false,
   isSending: false,
   streamingContent: null,
@@ -49,6 +56,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     try {
       const folderTree = await foldersAPI.getTree();
       set({ folderTree });
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  loadMuses: async () => {
+    try {
+      const muses = await musesAPI.list();
+      set({ muses });
     } catch (error) {
       set({ error: (error as Error).message });
     }
@@ -108,6 +124,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       await chatsAPI.update(chatId, { folder_id: folderId || undefined });
       await get().loadChats();
       await get().loadFolderTree();
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  setMuse: async (chatId: string, museId: string | null) => {
+    try {
+      const updated = await chatsAPI.update(chatId, { muse_id: museId ?? '' });
+      if (get().currentChat?.id === chatId) {
+        set((state) => ({
+          currentChat: state.currentChat ? { ...state.currentChat, muse_id: updated.muse_id } : null,
+        }));
+      }
     } catch (error) {
       set({ error: (error as Error).message });
     }
@@ -185,6 +214,35 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       await foldersAPI.delete(folderId);
       await get().loadFolderTree();
       await get().loadChats();
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  createMuse: async (data) => {
+    try {
+      const muse = await musesAPI.create(data);
+      await get().loadMuses();
+      return muse;
+    } catch (error) {
+      set({ error: (error as Error).message });
+      throw error;
+    }
+  },
+
+  updateMuse: async (museId, data) => {
+    try {
+      await musesAPI.update(museId, data);
+      await get().loadMuses();
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  deleteMuse: async (museId) => {
+    try {
+      await musesAPI.delete(museId);
+      await get().loadMuses();
     } catch (error) {
       set({ error: (error as Error).message });
     }

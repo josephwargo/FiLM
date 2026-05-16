@@ -45,12 +45,14 @@ class ChatCreate(ChatBase):
 class ChatUpdate(BaseModel):
     title: Optional[str] = None
     folder_id: Optional[str] = None
+    muse_id: Optional[str] = None
 
 
 class ChatResponse(ChatBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    muse_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     messages: List[MessageResponse] = []
@@ -62,6 +64,7 @@ class ChatListResponse(BaseModel):
     id: str
     title: str
     folder_id: Optional[str]
+    muse_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     message_count: int = 0
@@ -120,6 +123,44 @@ class FileFolderResponse(BaseModel):
     name: str
     created_at: datetime
     files: List[dict] = []
+
+
+# Muse schemas
+class MuseCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    system_prompt: str
+
+
+class MuseUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    system_prompt: Optional[str] = None
+
+
+class MuseContextCreate(BaseModel):
+    source_type: SourceType
+    source_id: str
+
+
+class MuseContextResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    muse_id: str
+    source_type: SourceType
+    source_id: str
+    created_at: datetime
+
+
+class MuseResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    description: Optional[str]
+    system_prompt: str
+    created_at: datetime
 
 
 # Chat request/response for AI
