@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { contextAPI } from '../services/api';
-import type { ContextAttachment, UploadedFile, FolderTreeItem, FileFolder } from '../types';
+import type { ContextAttachment, UploadedFile, FileFolder } from '../types';
 
 const MIN_WIDTH = 180;
 const MAX_WIDTH = 520;
@@ -23,7 +23,6 @@ export function ContextPanel() {
   const [isUploading, setIsUploading] = useState(false);
 
   // Expand/collapse state
-  const [expandedChatFolders, setExpandedChatFolders] = useState<Set<string>>(new Set());
   const [expandedFileFolders, setExpandedFileFolders] = useState<Set<string>>(new Set());
 
   // New file folder creation
@@ -86,13 +85,6 @@ export function ContextPanel() {
     if (!currentChat || chatId === currentChat.id || isAttached('chat', chatId)) return;
     try { await contextAPI.attach(currentChat.id, 'chat', chatId); await loadAttachments(); }
     catch (e) { console.error(e); }
-  };
-
-  const attachChatFolder = async (folder: FolderTreeItem) => {
-    if (!currentChat) return;
-    const toAdd = folder.chats.filter((c) => c.id !== currentChat.id && !isAttached('chat', c.id));
-    await Promise.all(toAdd.map((c) => contextAPI.attach(currentChat.id, 'chat', c.id).catch(() => {})));
-    await loadAttachments();
   };
 
   const attachFile = async (fileId: string) => {
@@ -179,24 +171,18 @@ export function ContextPanel() {
       ?? 'Unknown file';
   };
 
-  const chatFolderUnattached = (folder: FolderTreeItem) =>
-    folder.chats.filter((c) => c.id !== currentChat?.id && !isAttached('chat', c.id)).length;
-
   const fileFolderUnattached = (folder: FileFolder): number => {
     const direct = folder.files.filter((f) => !isAttached('file', f.id)).length;
     const nested = folder.children.reduce((sum, c) => sum + fileFolderUnattached(c), 0);
     return direct + nested;
   };
 
-  const toggleChatFolder = (id: string) =>
-    setExpandedChatFolders((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
-
   const toggleFileFolder = (id: string) =>
     setExpandedFileFolders((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   // --- Drag handlers ---
 
-  const onDragStart = (e: React.DragEvent, type: 'chat' | 'file' | 'chat-folder' | 'file-folder', id: string) => {
+  const onDragStart = (e: React.DragEvent, type: 'file' | 'file-folder', id: string) => {
     e.stopPropagation();
     if (type === 'file-folder') setDraggedFileFolderId(id);
     e.dataTransfer.setData('contextType', type);
@@ -204,22 +190,40 @@ export function ContextPanel() {
     e.dataTransfer.effectAllowed = 'copy';
   };
 
-  // Drop on context zone
+  // Drop on context zone — accepts drags from both LHS sidebar and RHS file sections
   const onContextDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOverContext(false);
     if (!currentChat) return;
-    const type = e.dataTransfer.getData('contextType');
-    const id = e.dataTransfer.getData('contextId');
-    if (!type || !id) return;
-    if (type === 'chat') await attachChat(id);
-    else if (type === 'file') await attachFile(id);
-    else if (type === 'chat-folder') {
-      const f = folderTree.find((x) => x.id === id);
-      if (f) await attachChatFolder(f);
-    } else if (type === 'file-folder') {
-      const f = fileFolders.find((x) => x.id === id);
+
+    // Items dragged from within the context panel
+    const contextType = e.dataTransfer.getData('contextType');
+    const contextId = e.dataTransfer.getData('contextId');
+
+    // Items dragged from the sidebar
+    const chatId = e.dataTransfer.getData('chatId');
+    const folderId = e.dataTransfer.getData('folderId');
+
+    if (contextType === 'file') await attachFile(contextId);
+    else if (contextType === 'file-folder') {
+      const f = fileFolders.find((x) => x.id === contextId);
       if (f) await attachFileFolder(f);
+    } else if (chatId) {
+      await attachChat(chatId);
+    } else if (folderId) {
+      const findFolder = (items: typeof folderTree): typeof folderTree[0] | undefined => {
+        for (const item of items) {
+          if (item.id === folderId) return item;
+          const found = findFolder(item.children);
+          if (found) return found;
+        }
+      };
+      const f = findFolder(folderTree);
+      if (f) {
+        const toAdd = f.chats.filter((c) => c.id !== currentChat.id && !isAttached('chat', c.id));
+        await Promise.all(toAdd.map((c) => contextAPI.attach(currentChat.id, 'chat', c.id).catch(() => {})));
+        await loadAttachments();
+      }
     }
   };
 
@@ -285,9 +289,7 @@ export function ContextPanel() {
 
           {isExpanded && (
             <div className="folder-chat-list">
-              {/* Nested file folders */}
               {folder.children.length > 0 && renderFileFolders(folder.children, depth + 1)}
-              {/* Files in this folder */}
               {folder.files.length === 0 && folder.children.length === 0
                 ? <div className="context-empty-hint">Drop files or folders here</div>
                 : folder.files.map((file) => (
@@ -309,12 +311,6 @@ export function ContextPanel() {
       );
     });
 
-  // --- Derived data ---
-
-  const availableChatFolders = folderTree.filter((f) =>
-    f.chats.some((c) => c.id !== currentChat?.id)
-  );
-  const unfiledChats = chats.filter((c) => !c.folder_id && c.id !== currentChat?.id);
   const unfiledFiles = files.filter((f) => !f.file_folder_id);
 
   // --- Collapsed state ---
@@ -369,83 +365,6 @@ export function ContextPanel() {
           </div>
         )}
       </div>
-
-      {/* Chat Folders */}
-      {availableChatFolders.length > 0 && (
-        <div className="context-section">
-          <h4>Chat Folders</h4>
-          <div className="context-items">
-            {availableChatFolders.map((folder) => {
-              const unattached = chatFolderUnattached(folder);
-              const allAdded = unattached === 0;
-              const isExpanded = expandedChatFolders.has(folder.id);
-              return (
-                <div key={folder.id}>
-                  <div
-                    className={`context-item folder-item ${allAdded ? 'attached' : 'draggable'}`}
-                    draggable={!allAdded}
-                    onDragStart={(e) => onDragStart(e, 'chat-folder', folder.id)}
-                    onClick={() => !allAdded && attachChatFolder(folder)}
-                  >
-                    <Folder size={14} />
-                    <span>{folder.name}</span>
-                    {allAdded
-                      ? <span className="attached-badge">All Added</span>
-                      : <span className="folder-count-badge">+{unattached}</span>}
-                    <button className="folder-expand-btn" onClick={(e) => { e.stopPropagation(); toggleChatFolder(folder.id); }}>
-                      {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                    </button>
-                  </div>
-                  {isExpanded && (
-                    <div className="folder-chat-list">
-                      {folder.chats.filter((c) => c.id !== currentChat?.id).map((chat) => (
-                        <div
-                          key={chat.id}
-                          className={`context-item context-item-indented ${isAttached('chat', chat.id) ? 'attached' : 'draggable'}`}
-                          draggable={!isAttached('chat', chat.id)}
-                          onDragStart={(e) => onDragStart(e, 'chat', chat.id)}
-                          onClick={() => !isAttached('chat', chat.id) && attachChat(chat.id)}
-                        >
-                          <MessageSquare size={12} />
-                          <span>{chat.title}</span>
-                          {isAttached('chat', chat.id) && <span className="attached-badge">Added</span>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Unfiled Chats */}
-      {(unfiledChats.length > 0 || availableChatFolders.length === 0) && (
-        <div className="context-section">
-          <h4>Unfiled Chats</h4>
-          <div className="context-items">
-            {unfiledChats.slice(0, 10).map((chat) => (
-              <div
-                key={chat.id}
-                className={`context-item draggable ${isAttached('chat', chat.id) ? 'attached' : ''}`}
-                draggable={!isAttached('chat', chat.id)}
-                onDragStart={(e) => onDragStart(e, 'chat', chat.id)}
-                onClick={() => !isAttached('chat', chat.id) && attachChat(chat.id)}
-              >
-                <MessageSquare size={14} />
-                <span>{chat.title}</span>
-                {isAttached('chat', chat.id) && <span className="attached-badge">Added</span>}
-              </div>
-            ))}
-            {unfiledChats.length === 0 && (
-              <div className="context-empty-hint">
-                {availableChatFolders.length > 0 ? 'No unfiled chats' : 'No other chats available'}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* File Folders */}
       <div className="context-section">

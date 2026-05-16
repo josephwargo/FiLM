@@ -11,12 +11,18 @@ Tool to enable better management, organization, and storage of LLM chats & conte
 1. **Chat Interface**
    - [x] Send messages to LLM and receive responses
    - [x] Streaming responses endpoint (UI uses non-streaming)
-   - [ ] Markdown rendering for code blocks and formatting
+   - [x] Real-time streaming in the UI (SSE via ReadableStream)
+   - [x] Markdown rendering for code blocks and formatting (react-markdown + rehype-highlight)
+   - [x] Responsive design (context panel hides ≤900px)
 
 2. **Virtual File System**
    - [x] Create folders and subfolders to organize chats
    - [x] Move, rename, and delete chats
    - [x] Drag & drop chats into folders
+   - [x] Drag & drop folders into other folders (unlimited nesting)
+   - [x] "Chat Folders" and "Unfiled Chats" section labels for clarity
+   - [x] Collapsible sidebar (collapses to icon strip, restores exact width)
+   - [x] Drag-to-resize sidebar
    - [ ] Search across all chats
 
 3. **Context/RAG System**
@@ -27,28 +33,39 @@ Tool to enable better management, organization, and storage of LLM chats & conte
    - [x] Drag & drop context panel with "Current Context" drop zone
    - [x] Context persistence per chat
    - [x] Delete uploaded files
+   - [x] File folders to organize uploaded files (unlimited nesting)
+   - [x] Drag files into file folders; drag file folders into other file folders
+   - [x] Attach entire file folder as context (recursively attaches all files)
+   - [x] Collapsible, resizable context panel with indigo visual theme
+
+4. **UI / Layout**
+   - [x] FiLM logo in fixed topbar (not embedded in sidebar)
+   - [x] "Library" header on sidebar mirrors "Context" header on context panel
+   - [x] Sidebar: red/pink accent palette
+   - [x] Context panel: indigo accent palette (visually distinct)
+   - [x] Both panels collapsible and drag-to-resize
 
 ## Technical Requirements
 
 ### Architecture
 ```
-┌─────────────────────────────────────────────────────┐
-│                    Frontend (React)                  │
-│         Chat UI  |  File Explorer  |  Context Panel │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                    Frontend (React)                           │
+│  Topbar | Sidebar (Library) | Chat Area | Context Panel      │
+└──────────────────────────────────────────────────────────────┘
                           │
                           ▼
-┌─────────────────────────────────────────────────────┐
-│                 Backend (FastAPI/Node)               │
-│   Chat API  |  File Management  |  RAG Pipeline     │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                 Backend (FastAPI/Python)                       │
+│   Chat API  |  Folder API  |  Context API  |  RAG Pipeline   │
+└──────────────────────────────────────────────────────────────┘
                           │
           ┌───────────────┼───────────────┐
           ▼               ▼               ▼
     ┌──────────┐   ┌────────────┐   ┌──────────┐
-    │ Gemini   │   │ ChromaDB   │   │ SQLite/  │
-    │ API      │   │ (vectors)  │   │ Postgres │
-    │ (free)   │   │            │   │ (metadata)│
+    │ Gemini   │   │ ChromaDB   │   │ SQLite   │
+    │ API      │   │ (vectors)  │   │(metadata)│
+    │ (free)   │   │            │   │          │
     └──────────┘   └────────────┘   └──────────┘
 ```
 
@@ -62,33 +79,42 @@ Tool to enable better management, organization, and storage of LLM chats & conte
 | **Frontend** | React + Vite + TypeScript | Zustand for state management |
 | **Metadata DB** | SQLite | SQLAlchemy ORM |
 | **PDF Processing** | pypdf | Text extraction from PDFs |
+| **Markdown** | react-markdown + rehype-highlight | Syntax highlighting |
 | **Icons** | Lucide React | Modern icon set |
 
 ### API Endpoints (Implemented)
 ```
 # Chats
-GET    /api/chats                - List all chats
-POST   /api/chats                - Create new chat
-GET    /api/chats/:id            - Get chat with messages
-DELETE /api/chats/:id            - Delete chat
-PATCH  /api/chats/:id            - Update chat (rename, move folder)
-POST   /api/chats/:id/messages   - Send message, get AI response
-POST   /api/chats/:id/messages/stream - Send message, get streaming response
+GET    /api/chats                         - List all chats
+POST   /api/chats                         - Create new chat
+GET    /api/chats/:id                     - Get chat with messages
+DELETE /api/chats/:id                     - Delete chat
+PATCH  /api/chats/:id                     - Update chat (rename, move folder)
+POST   /api/chats/:id/messages            - Send message, get AI response
+POST   /api/chats/:id/messages/stream     - Send message, get SSE streaming response
 
-# Folders
-GET    /api/folders              - List folder structure
-POST   /api/folders              - Create folder
-DELETE /api/folders/:id          - Delete folder
+# Chat Folders
+GET    /api/folders                       - List full folder tree (recursive)
+POST   /api/folders                       - Create folder
+PATCH  /api/folders/:id                   - Rename / nest folder
+DELETE /api/folders/:id                   - Delete folder
 
 # Context
-GET    /api/context/:chat_id     - Get attachments for a chat
-POST   /api/context/attach       - Attach chat/file as context
-DELETE /api/context/:attachment_id - Remove context attachment
+GET    /api/context/:chat_id              - Get attachments for a chat
+POST   /api/context/attach               - Attach chat/file as context
+DELETE /api/context/detach/:attachment_id - Remove context attachment
 
-# Files
-GET    /api/context/files        - List all uploaded files
-POST   /api/context/files/upload - Upload file for RAG (PDF, TXT, MD)
-DELETE /api/context/files/:id    - Delete uploaded file
+# Uploaded Files
+GET    /api/context/files                 - List all uploaded files
+POST   /api/context/files/upload          - Upload file for RAG (PDF, TXT, MD)
+PATCH  /api/context/files/:id             - Move file to a file folder
+DELETE /api/context/files/:id             - Delete uploaded file
+
+# File Folders
+GET    /api/context/file-folders          - List file folder tree (recursive)
+POST   /api/context/file-folders          - Create file folder
+PATCH  /api/context/file-folders/:id      - Rename / nest file folder
+DELETE /api/context/file-folders/:id      - Delete file folder
 ```
 
 ### Data Models (Implemented)
@@ -96,7 +122,7 @@ DELETE /api/context/files/:id    - Delete uploaded file
 Chat:
   - id: string (UUID)
   - title: string
-  - folder_id: string (nullable, FK to Folder)
+  - folder_id: string | null  (FK to Folder)
   - messages: Message[]
   - created_at: datetime
   - updated_at: datetime
@@ -108,15 +134,15 @@ Message:
   - content: string
   - created_at: datetime
 
-Folder:
+Folder:  (chat folders)
   - id: string (UUID)
   - name: string
-  - parent_id: string (nullable, FK to Folder)
+  - parent_id: string | null  (self-referential FK)
   - created_at: datetime
 
 ContextAttachment:
   - id: string (UUID)
-  - chat_id: string (FK to Chat - the chat using this context)
+  - chat_id: string (FK to Chat)
   - source_type: "chat" | "file"
   - source_id: string
   - created_at: datetime
@@ -126,7 +152,14 @@ UploadedFile:
   - filename: string (stored filename)
   - original_filename: string
   - content_type: string
-  - file_size: int
+  - size: int
+  - file_folder_id: string | null  (FK to FileFolder)
+  - created_at: datetime
+
+FileFolder:  (file folders)
+  - id: string (UUID)
+  - name: string
+  - parent_id: string | null  (self-referential FK)
   - created_at: datetime
 ```
 
@@ -137,35 +170,37 @@ UploadedFile:
 
 ### Visual Identity
 - Looks like a traditional AI chat app at first glance
-- File explorer panel on the left (like VS Code/file manager)
-- Chat panel in the center
-- Context panel on the right (collapsible)
-- Distinct visual cues that this is different:
-  - Folder icons and tree structure prominent
-  - "Attached context" badges on chats
-  - Different color scheme from typical chat apps
+- Fixed topbar with FiLM logo
+- Collapsible, resizable sidebar on the left ("Library") — red/pink accent
+- Chat panel in the center with markdown + real-time streaming
+- Collapsible, resizable context panel on the right — indigo accent (visually distinct from sidebar)
+- "Chat Folders" / "Unfiled Chats" labels make the sidebar's purpose clear
+- "File Folders" / "Unfiled Files" sections in the context panel for file organization
 
-### UI Layout (Draft)
+### UI Layout
 ```
-┌──────────┬────────────────────────┬──────────┐
-│          │                        │ Context  │
-│  Folders │      Chat Area         │  Panel   │
-│  & Chats │                        │          │
-│          │                        │ [Files]  │
-│  [Tree]  │  [Messages]            │ [Chats]  │
-│          │                        │          │
-│          │  [Input Box]           │          │
-└──────────┴────────────────────────┴──────────┘
+┌──────────────────────────────────────────────────────┐
+│  FiLM                                    [topbar]    │
+├──────────┬─────────────────────────┬─────────────────┤
+│          │                         │  Context        │
+│ Library  │      Chat Area          │                 │
+│          │   (markdown + stream)   │  [Chat Folders] │
+│ [Chat    │                         │  [File Folders] │
+│  Folders]│  [Messages]             │  [Files]        │
+│          │                         │                 │
+│ [Unfiled]│  [Input Box]            │  [Drop Zone]    │
+└──────────┴─────────────────────────┴─────────────────┘
+  ↕ resize                             ↕ resize
+  ← collapse                           collapse →
 ```
 
 ## Cost Estimate (MVP)
 | Item | Cost |
 |------|------|
 | Gemini API | $0 (free tier: 1500 req/day) |
-| Gemini Embeddings | $0 (free tier) |
+| Sentence Transformers | $0 (runs locally) |
 | ChromaDB | $0 (local/self-hosted) |
-| Hosting (Vercel/Railway) | $0-5/mo |
-| **Total MVP** | **$0-5/mo** |
+| **Total MVP** | **$0** |
 
 ## Development Phases
 
@@ -179,6 +214,8 @@ UploadedFile:
 - [x] Create/rename/delete/move chats and folders
 - [x] SQLite schema for folders
 - [x] Drag & drop chats into folders
+- [x] Nested chat folders (drag folders into folders)
+- [x] Collapsible + resizable sidebar
 
 ### Phase 3: RAG/Context - COMPLETE
 - [x] ChromaDB integration
@@ -187,24 +224,25 @@ UploadedFile:
 - [x] Inject context into prompts
 - [x] Context persistence per chat
 
-### Phase 4: Polish - IN PROGRESS
+### Phase 4: Polish - COMPLETE
 - [x] File upload support (PDF, TXT, MD)
 - [x] PDF text extraction
 - [x] File deletion
+- [x] Markdown rendering in chat (react-markdown + rehype-highlight)
+- [x] Real-time streaming in UI (SSE)
+- [x] Responsive design
+- [x] File folders (organize uploaded files; nested; drag & drop)
+- [x] Attach file folder as context (bulk attach all files recursively)
+- [x] FiLM logo in topbar (not in sidebar)
+- [x] Collapsible + resizable context panel
+- [x] Visual distinction: sidebar (red) vs context panel (indigo)
 - [ ] Search across chats
-- [ ] Markdown rendering in chat
-- [ ] UI polish and responsive design
+
+### Phase 5: Personas - PLANNED
 
 ## Future Enhancements
 - [ ] Search across all chats
-- [ ] Markdown rendering for code blocks
-- [ ] Real-time streaming in UI (backend ready)
-- [ ] Subfolder support (nested folders)
 - [ ] Export/import chats
 - [ ] User authentication
 - [ ] Electron desktop wrapper
-
-## Additional Notes
-- Currently local-only (no auth) for MVP
-- Add user accounts in v2 if needed
-- Consider Electron wrapper for desktop app later
+- [ ] Web page / URL ingestion as context
