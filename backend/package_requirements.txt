@@ -11,6 +11,9 @@ python-dotenv==0.21.0
 
 # AI/LLM
 google-genai
+anthropic
+openai
+# (Ollama needs no SDK — plain HTTP via httpx)
 
 # Vector database
 chromadb==1.4.1

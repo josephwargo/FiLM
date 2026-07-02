@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 def _utcnow():
     return datetime.now(timezone.utc)
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum, Boolean
 from sqlalchemy.orm import relationship
 import enum
 
@@ -74,6 +74,8 @@ class Chat(Base):
     title = Column(String(255), nullable=False, default="New Chat")
     folder_id = Column(String, ForeignKey("folders.id"), nullable=True)
     muse_id = Column(String, ForeignKey("muses.id"), nullable=True)
+    # LLM model id from the catalog. Null = app default.
+    model = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
@@ -91,6 +93,8 @@ class Message(Base):
     chat_id = Column(String, ForeignKey("chats.id"), nullable=False)
     role = Column(Enum(MessageRole), nullable=False)
     content = Column(Text, nullable=False)
+    # Provenance: which model produced this message. Null on user messages and legacy rows.
+    model = Column(String, nullable=True)
     timestamp = Column(DateTime, default=_utcnow)
 
     # Relationships
@@ -111,6 +115,22 @@ class ContextAttachment(Base):
 
     # Relationships
     chat = relationship("Chat", back_populates="context_attachments")
+
+
+class ProviderCredential(Base):
+    __tablename__ = "provider_credentials"
+
+    provider = Column(String, primary_key=True)  # google | anthropic | openai | ollama
+    # API key for cloud providers; base URL for ollama
+    value = Column(Text, nullable=False)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+
+class ModelPref(Base):
+    __tablename__ = "model_prefs"
+
+    model_id = Column(String, primary_key=True)
+    enabled = Column(Boolean, nullable=False)
 
 
 class FileFolder(Base):

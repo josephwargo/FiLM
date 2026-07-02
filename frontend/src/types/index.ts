@@ -4,6 +4,7 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  model?: string | null;
 }
 
 export interface Chat {
@@ -11,9 +12,41 @@ export interface Chat {
   title: string;
   folder_id: string | null;
   muse_id: string | null;
+  model: string | null;
   created_at: string;
   updated_at: string;
   messages: Message[];
+}
+
+export interface ModelInfo {
+  id: string;
+  name: string;
+  provider: string;
+  description: string;
+  available: boolean;
+  is_default: boolean;
+}
+
+export interface CatalogModel extends ModelInfo {
+  enabled: boolean;
+}
+
+export interface ProviderStatus {
+  configured: boolean;
+  source: 'db' | 'env' | null;
+  models?: string[]; // ollama only: discovered model tags
+}
+
+export interface ModelCatalog {
+  models: CatalogModel[];
+  providers: Record<string, ProviderStatus>;
+}
+
+export interface SendErrorInfo {
+  type: 'auth' | 'provider';
+  provider: string | null;
+  model: string | null;
+  message: string;
 }
 
 export interface ChatListItem {

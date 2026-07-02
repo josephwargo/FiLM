@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import type { Chat, ChatListItem, Message, FolderTreeItem, Muse } from '../types';
-import { chatsAPI, foldersAPI, musesAPI } from '../services/api';
+import type { Chat, ChatListItem, Message, FolderTreeItem, Muse, ModelInfo, SendErrorInfo } from '../types';
+import { chatsAPI, foldersAPI, musesAPI, modelsAPI } from '../services/api';
 
 interface ChatStore {
   // State
@@ -8,25 +8,31 @@ interface ChatStore {
   currentChat: Chat | null;
   folderTree: FolderTreeItem[];
   muses: Muse[];
+  models: ModelInfo[];
   isLoading: boolean;
   isSending: boolean;
   streamingContent: string | null;
   error: string | null;
-  view: 'chat' | 'muse-library';
+  sendError: SendErrorInfo | null;
+  view: 'chat' | 'muse-library' | 'model-manager';
   museLibraryTarget: string | 'new' | null;
 
   // Actions
   openMuseLibrary: (target?: string | 'new') => void;
   closeMuseLibrary: () => void;
+  openModelManager: () => void;
+  closeModelManager: () => void;
   loadChats: () => Promise<void>;
   loadFolderTree: () => Promise<void>;
   loadMuses: () => Promise<void>;
+  loadModels: () => Promise<void>;
   selectChat: (chatId: string) => Promise<void>;
   createChat: (folderId?: string) => Promise<Chat>;
   deleteChat: (chatId: string) => Promise<void>;
   renameChat: (chatId: string, title: string) => Promise<void>;
   moveChat: (chatId: string, folderId: string | null) => Promise<void>;
   setMuse: (chatId: string, museId: string | null) => Promise<void>;
+  setChatModel: (chatId: string, modelId: string | null) => Promise<void>;
   sendMessage: (message: string, contextIds?: string[]) => Promise<void>;
   createFolder: (name: string, parentId?: string) => Promise<void>;
   deleteFolder: (folderId: string) => Promise<void>;
@@ -34,6 +40,7 @@ interface ChatStore {
   updateMuse: (museId: string, data: { name?: string; description?: string; system_prompt?: string }) => Promise<void>;
   deleteMuse: (museId: string) => Promise<void>;
   clearError: () => void;
+  clearSendError: () => void;
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -41,10 +48,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   currentChat: null,
   folderTree: [],
   muses: [],
+  models: [],
   isLoading: false,
   isSending: false,
   streamingContent: null,
   error: null,
+  sendError: null,
   view: 'chat',
   museLibraryTarget: null,
 
@@ -52,6 +61,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ view: 'muse-library', museLibraryTarget: target ?? null }),
 
   closeMuseLibrary: () => set({ view: 'chat', museLibraryTarget: null }),
+
+  openModelManager: () => set({ view: 'model-manager', museLibraryTarget: null }),
+
+  closeModelManager: () => set({ view: 'chat' }),
 
   loadChats: async () => {
     try {
@@ -76,6 +89,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     try {
       const muses = await musesAPI.list();
       set({ muses });
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
+  loadModels: async () => {
+    try {
+      const models = await modelsAPI.list();
+      set({ models });
     } catch (error) {
       set({ error: (error as Error).message });
     }
@@ -153,6 +175,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
+  setChatModel: async (chatId: string, modelId: string | null) => {
+    try {
+      const updated = await chatsAPI.update(chatId, { model: modelId ?? '' });
+      if (get().currentChat?.id === chatId) {
+        set((state) => ({
+          currentChat: state.currentChat ? { ...state.currentChat, model: updated.model } : null,
+        }));
+      }
+    } catch (error) {
+      set({ error: (error as Error).message });
+    }
+  },
+
   sendMessage: async (message: string, _contextIds: string[] = []) => {
     const currentChat = get().currentChat;
     if (!currentChat) return;
@@ -171,6 +206,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         : null,
       isSending: true,
       streamingContent: '',
+      sendError: null,
     }));
 
     await new Promise<void>((resolve) => {
@@ -180,7 +216,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         (chunk) => {
           set((state) => ({ streamingContent: (state.streamingContent ?? '') + chunk }));
         },
-        (messageId, title) => {
+        (messageId, title, model) => {
           const finalContent = get().streamingContent ?? '';
           const assistantMessage: Message = {
             id: messageId,
@@ -188,6 +224,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             role: 'assistant',
             content: finalContent,
             timestamp: new Date().toISOString(),
+            model: model ?? null,
           };
           set((state) => ({
             currentChat: state.currentChat
@@ -203,8 +240,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           get().loadChats();
           resolve();
         },
-        (error) => {
-          set({ error: error.message, isSending: false, streamingContent: null });
+        (error, info) => {
+          set({
+            error: info ? null : error.message,
+            sendError: info ?? null,
+            isSending: false,
+            streamingContent: null,
+          });
           resolve();
         }
       );
@@ -260,4 +302,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  clearSendError: () => set({ sendError: null }),
 }));

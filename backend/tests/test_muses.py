@@ -160,7 +160,7 @@ def test_system_prompt_injected_on_send(client):
     chat_id = _create_chat(client)["id"]
     client.patch(f"/api/chats/{chat_id}", json={"muse_id": muse_id})
 
-    with patch("app.routers.chats.gemini_service", mock_gemini):
+    with patch("app.routers.chats.get_llm_service", lambda _mid: mock_gemini):
         client.post(f"/api/chats/{chat_id}/messages", json={"message": "Ahoy!"})
 
     assert captured.get("system_prompt") == "You are a pirate."
@@ -181,7 +181,7 @@ def test_no_system_prompt_without_muse(client):
 
     chat_id = _create_chat(client)["id"]
 
-    with patch("app.routers.chats.gemini_service", mock_gemini):
+    with patch("app.routers.chats.get_llm_service", lambda _mid: mock_gemini):
         client.post(f"/api/chats/{chat_id}/messages", json={"message": "Hello"})
 
     assert captured.get("system_prompt") is None
@@ -285,7 +285,7 @@ def test_muse_pinned_context_prepended_to_llm_call(client):
     chat_id = _create_chat(client)["id"]
     client.patch(f"/api/chats/{chat_id}", json={"muse_id": muse_id})
 
-    with patch("app.routers.chats.gemini_service", mock_gemini):
+    with patch("app.routers.chats.get_llm_service", lambda _mid: mock_gemini):
         client.post(f"/api/chats/{chat_id}/messages", json={"message": "Hello"})
 
     assert captured.get("context") is not None
@@ -371,7 +371,7 @@ def test_sliced_muse_context_excludes_out_of_range(client):
     tgt = _create_chat(client, title="Target")["id"]
     client.patch(f"/api/chats/{tgt}", json={"muse_id": muse_id})
 
-    with patch("app.routers.chats.gemini_service", mock_gemini):
+    with patch("app.routers.chats.get_llm_service", lambda _mid: mock_gemini):
         client.post(f"/api/chats/{tgt}/messages", json={"message": "Go"})
 
     ctx = captured.get("context") or ""

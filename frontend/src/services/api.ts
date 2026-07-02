@@ -11,7 +11,10 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new Error(error.detail || 'API request failed');
+    const detail = error.detail;
+    const message =
+      typeof detail === 'string' ? detail : detail?.message || 'API request failed';
+    throw new Error(message);
   }
 
   return response.json();
@@ -31,7 +34,7 @@ export const chatsAPI = {
       body: JSON.stringify(data),
     }),
 
-  update: (chatId: string, data: { title?: string; folder_id?: string; muse_id?: string }) =>
+  update: (chatId: string, data: { title?: string; folder_id?: string; muse_id?: string; model?: string }) =>
     fetchAPI<any>(`/chats/${chatId}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
@@ -50,8 +53,8 @@ export const chatsAPI = {
     chatId: string,
     message: string,
     onChunk: (chunk: string) => void,
-    onDone: (messageId: string, title?: string) => void,
-    onError: (error: Error) => void
+    onDone: (messageId: string, title?: string, model?: string) => void,
+    onError: (error: Error, info?: import('../types').SendErrorInfo) => void
   ) => {
     try {
       const response = await fetch(`${API_BASE}/chats/${chatId}/messages/stream`, {
@@ -76,13 +79,38 @@ export const chatsAPI = {
           if (!line.startsWith('data: ')) continue;
           const data = JSON.parse(line.slice(6));
           if (data.chunk !== undefined) onChunk(data.chunk);
-          else if (data.done) onDone(data.message_id, data.title);
+          else if (data.error) {
+            onError(new Error(data.error.message || 'The model failed to respond'), data.error);
+            return;
+          } else if (data.done) onDone(data.message_id, data.title, data.model);
         }
       }
     } catch (error) {
       onError(error as Error);
     }
   },
+};
+
+// Models
+export const modelsAPI = {
+  list: () => fetchAPI<any[]>('/models'),
+
+  getCatalog: () => fetchAPI<any>('/models/catalog'),
+
+  saveCredential: (provider: string, value: string) =>
+    fetchAPI<any>(`/models/providers/${provider}/credential`, {
+      method: 'PUT',
+      body: JSON.stringify({ value }),
+    }),
+
+  deleteCredential: (provider: string) =>
+    fetchAPI<any>(`/models/providers/${provider}/credential`, { method: 'DELETE' }),
+
+  setModelEnabled: (modelId: string, enabled: boolean) =>
+    fetchAPI<any>(`/models/${modelId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled }),
+    }),
 };
 
 // Folders

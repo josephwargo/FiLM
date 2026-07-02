@@ -2,7 +2,7 @@
 
 **Part of:** [FiLM Master PRD](Master_PRD.md)
 **Test type:** API integration tests (pytest + FastAPI TestClient)
-**Last updated:** 2026-05-16
+**Last updated:** 2026-07-02
 
 ---
 
@@ -93,6 +93,10 @@ Tests use an isolated SQLite DB (`tests/test_film.db`) and mock all external cal
 | CTX-017 | Circular reference doesn't loop | P0 | Regression | Attach A→B and B→A; send from A | Request completes (no infinite loop) |
 | CTX-018 | Current chat excluded from own context | P0 | Regression | Attach a chat to itself; send message | Request completes (no self-injection) |
 | CTX-019 | Shared chat not duplicated across Muse + per-chat | P1 | Regression | Same chat pinned to Muse and attached per-chat | Chat transcript appears exactly once in LLM context |
+| CTX-020 | Update slice bounds on attachment | P0 | Smoke | PATCH /api/context/attachments/:id with start/end message IDs | Bounds stored; nulls clear them |
+| CTX-021 | Sliced attachment trims LLM context | P0 | Smoke | Slice a chat attachment, send message | Only in-range messages appear in context; "(sliced)" header present |
+| CTX-022 | End-only slice includes from start | P1 | Integration | Set only `end_message_id` | Everything from the beginning up to the bound is included |
+| CTX-023 | Unknown bound ID falls back | P1 | Regression | Slice with a message ID not in the source chat | Falls back silently to the chat's natural bounds |
 
 ---
 
@@ -120,6 +124,30 @@ Tests use an isolated SQLite DB (`tests/test_film.db`) and mock all external cal
 | MUSE-016 | Unpin Muse context | P1 | Integration | DELETE /api/muses/:id/context/:ctx_id | Item absent from context list |
 | MUSE-017 | Pin context to nonexistent Muse | P0 | Regression | POST /api/muses/bad-id/context | 404 |
 | MUSE-018 | Muse pinned context in LLM call | P0 | Smoke | Muse has file pinned; send message from assigned chat | File name appears in context string passed to LLM |
+| MUSE-019 | Pin with slice bounds + PATCH | P1 | Integration | Pin chat with bounds; PATCH /api/muses/:id/context/:ctx_id | Bounds stored, updated, and cleared with nulls |
+| MUSE-020 | Sliced muse-pinned chat trims LLM context | P0 | Smoke | Muse pins a sliced chat; send from assigned chat | Only in-range messages injected; "(sliced)" header present |
+
+---
+
+## Suite 5 — Model Selector
+*PRD: [model_selector_PRD.md](products/model_selector_PRD.md)*
+*File: `backend/tests/test_models.py`*
+
+| ID | Test Name | Priority | Type | Description | Expected Result |
+|----|-----------|----------|------|-------------|-----------------|
+| MODEL-001 | Models catalog | P0 | Smoke | GET /api/models | ≥2 models with full shape; exactly one `is_default` matching the app default |
+| MODEL-002 | Set and clear per-chat model | P0 | Smoke | PATCH /api/chats/:id with `model`, then `model: ""` | Model persisted; empty string clears back to null |
+| MODEL-003 | Send routes to chat model + provenance | P0 | Smoke | Set chat model, send message | LLM call uses the chat's model; assistant message stamped with it, user message not |
+| MODEL-004 | Retired model falls back to default | P1 | Regression | Chat stores an id missing from the catalog; send | Default model used and stamped; stored preference preserved |
+| MODEL-005 | SSE done event carries model | P1 | Regression | POST /api/chats/:id/messages/stream | `done` event includes the resolved model id |
+| MODEL-006 | Full catalog + provider status | P0 | Smoke | GET /api/models/catalog | All 9 curated models; Google enabled by default, Anthropic/OpenAI disabled; 4 providers with `configured`/`source` status |
+| MODEL-007 | Enable/disable models | P0 | Smoke | PATCH /api/models/:id | Enabled model appears in picker; disabled model disappears and sends fall back to default; unknown id 404 |
+| MODEL-008 | Credential validation on save | P0 | Smoke | PUT /api/models/providers/:p/credential | Invalid key → 400, nothing stored; valid key → saved with source `db`, provider models become available |
+| MODEL-009 | Credential deletion + env fallback | P1 | Regression | DELETE /api/models/providers/:p/credential | Provider unconfigured, or falls back to `.env` when an env key exists; unknown provider 404 |
+| MODEL-010 | Ollama discovery + routing | P1 | Integration | Configure Ollama URL; GET /api/models; send | Discovered `ollama:<tag>` models appear in picker; sends route to the Ollama adapter |
+| MODEL-011 | Auth failure returns structured error | P0 | Regression | Send with provider raising 401-style error | 502 with `{type: "auth", provider, model, message}` detail |
+| MODEL-012 | Auth failure surfaces on SSE stream | P1 | Regression | Stream send with failing provider | SSE `error` event with auth type; no assistant message persisted |
+| MODEL-013 | Blank credential rejected | P2 | Regression | PUT credential with whitespace value | 400 before any validation call |
 
 ---
 
@@ -127,7 +155,7 @@ Tests use an isolated SQLite DB (`tests/test_film.db`) and mock all external cal
 
 | Gate | Requirement |
 |------|-------------|
-| **Ship** | All P0 tests pass (27 P0 tests across all suites) |
+| **Ship** | All P0 tests pass (43 P0 tests across all suites) |
 | **Ship with caveats** | All P0 pass; any P1 failures documented as known issues |
 | **Do not ship** | Any P0 failure |
 
@@ -139,7 +167,7 @@ Tests use an isolated SQLite DB (`tests/test_film.db`) and mock all external cal
 |------|--------|
 | UI / frontend interactions | No E2E test framework set up yet. Manual test using the running app. |
 | Drag & drop behavior | Requires browser automation (Playwright). Planned for Phase 5. |
-| Real Gemini responses | Mocked — quality of AI output is not a regression test concern. |
+| Real LLM responses (Gemini/Claude/GPT/Ollama) | Mocked — quality of AI output is not a regression test concern. Credential validation is also mocked (no live key checks in CI). |
 | Real vector search (ChromaDB) | Mocked — RAG retrieval accuracy is evaluated manually against known docs. |
 | PDF text extraction quality | Covered by pypdf library's own tests. |
 | Search across chats | Feature not yet implemented. |
@@ -149,7 +177,7 @@ Tests use an isolated SQLite DB (`tests/test_film.db`) and mock all external cal
 ## Adding New Tests
 
 When a new feature is built:
-1. Add test cases to the appropriate file (`test_chats.py`, `test_folders.py`, `test_context.py`, or `test_muses.py`)
+1. Add test cases to the appropriate file (`test_chats.py`, `test_folders.py`, `test_context.py`, `test_muses.py`, or `test_models.py`)
 2. Assign the next ID in sequence (e.g., MUSE-019, CTX-020)
 3. Add a row to the corresponding table above
 4. Mark priority based on: P0 if a regression would break the UI for any user, P1 if it degrades a named feature, P2 otherwise

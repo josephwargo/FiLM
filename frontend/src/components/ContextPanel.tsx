@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   FileText, MessageSquare, X, Upload, ChevronLeft, ChevronRight,
-  ChevronDown, Inbox, Trash2, Folder, FolderPlus, Scissors, Wand2,
+  ChevronDown, Inbox, Trash2, Folder, FolderPlus, Scissors,
 } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { contextAPI, chatsAPI, musesAPI } from '../services/api';
@@ -502,8 +502,6 @@ export function ContextPanel() {
       <div className="context-tools-divider">
         <span>Add &amp; Configure</span>
       </div>
-
-      <MusePicker />
 
       {/* File Folders */}
       <div className="context-section">

@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.models.database import Base, engine
-from app.routers import chats, folders, context, muses
+from app.routers import chats, folders, context, muses, models
 
 # Create new tables (existing tables are not modified by create_all)
 Base.metadata.create_all(bind=engine)
@@ -17,6 +17,8 @@ _MIGRATIONS = [
     "ALTER TABLE context_attachments ADD COLUMN end_message_id VARCHAR",
     "ALTER TABLE muse_contexts ADD COLUMN start_message_id VARCHAR",
     "ALTER TABLE muse_contexts ADD COLUMN end_message_id VARCHAR",
+    "ALTER TABLE chats ADD COLUMN model VARCHAR",
+    "ALTER TABLE messages ADD COLUMN model VARCHAR",
 ]
 with engine.connect() as _conn:
     for _sql in _MIGRATIONS:
@@ -46,6 +48,7 @@ app.include_router(chats.router)
 app.include_router(folders.router)
 app.include_router(context.router)
 app.include_router(muses.router)
+app.include_router(models.router)
 
 
 @app.get("/")

@@ -86,7 +86,8 @@ def client(db):
 
     app.dependency_overrides[get_db] = override_get_db
 
-    with patch("app.routers.chats.gemini_service", _mock_gemini()), \
+    _llm = _mock_gemini()
+    with patch("app.routers.chats.get_llm_service", lambda _model_id: _llm), \
          patch("app.routers.chats.chroma_service", _mock_chroma()), \
          patch("app.routers.context.chroma_service", _mock_chroma()):
         with TestClient(app) as c:

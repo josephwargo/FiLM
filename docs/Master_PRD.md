@@ -21,8 +21,9 @@ Individual power users who use LLMs frequently across multiple projects or topic
 | Chat Interface | Complete | [chat_interface_PRD.md](products/chat_interface_PRD.md) |
 | Virtual File System | Complete | [file_system_PRD.md](products/file_system_PRD.md) |
 | RAG / Context System | Complete | [rag_context_PRD.md](products/rag_context_PRD.md) |
-| Chat Slicing | Planned | [chat_slicing_PRD.md](products/chat_slicing_PRD.md) |
-| Muses | In Progress | [muses_PRD.md](products/muses_PRD.md) |
+| Chat Slicing | Complete | [chat_slicing_PRD.md](products/chat_slicing_PRD.md) |
+| Muses | Complete | [muses_PRD.md](products/muses_PRD.md) |
+| Model Selector | Complete (Phases 1 + 2) | [model_selector_PRD.md](products/model_selector_PRD.md) |
 
 ## Test Coverage
 

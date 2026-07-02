@@ -10,7 +10,7 @@ from ..models.pydantic_models import (
     ChatCreate, ChatUpdate, ChatResponse, ChatListResponse,
     MessageCreate, MessageResponse, ChatMessageRequest
 )
-from ..services.gemini_service import gemini_service
+from ..services.llm import get_llm_service, get_model_provider, resolve_model_id
 from ..services.chroma_service import chroma_service
 from pathlib import Path
 
@@ -20,6 +20,21 @@ UPLOAD_DIR = BACKEND_DIR / "uploads"
 router = APIRouter(prefix="/api/chats", tags=["chats"])
 
 MAX_CONTEXT_DEPTH = 3
+
+_AUTH_ERROR_HINTS = ("api key", "api_key", "unauthorized", "authentication", "permission denied", "invalid x-api-key")
+
+
+def _classify_send_error(e: Exception, model_id: str) -> dict:
+    """Structured error for a failed LLM call so the UI can route the user to the Model Manager."""
+    status = getattr(e, "status_code", None)
+    text = str(e).lower()
+    is_auth = status in (401, 403) or any(hint in text for hint in _AUTH_ERROR_HINTS)
+    return {
+        "type": "auth" if is_auth else "provider",
+        "provider": get_model_provider(model_id),
+        "model": model_id,
+        "message": str(e),
+    }
 
 
 def _build_context_parts(
@@ -175,6 +190,8 @@ def update_chat(chat_id: str, chat_data: ChatUpdate, db: Session = Depends(get_d
         chat.folder_id = chat_data.folder_id
     if chat_data.muse_id is not None:
         chat.muse_id = chat_data.muse_id if chat_data.muse_id != "" else None
+    if chat_data.model is not None:
+        chat.model = chat_data.model if chat_data.model != "" else None
 
     db.commit()
     db.refresh(chat)
@@ -213,14 +230,18 @@ async def send_message(chat_id: str, request: ChatMessageRequest, db: Session = 
     context_parts, system_prompt = _resolve_context(db, chat)
     context = "\n\n".join(context_parts) if context_parts else None
 
-    response_text = gemini_service.generate_response(
-        message=request.message,
-        history=history,
-        context=context,
-        system_prompt=system_prompt,
-    )
+    model_id = resolve_model_id(chat.model)
+    try:
+        response_text = get_llm_service(model_id).generate_response(
+            message=request.message,
+            history=history,
+            context=context,
+            system_prompt=system_prompt,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=_classify_send_error(e, model_id))
 
-    assistant_message = Message(chat_id=chat_id, role=MessageRole.ASSISTANT, content=response_text)
+    assistant_message = Message(chat_id=chat_id, role=MessageRole.ASSISTANT, content=response_text, model=model_id)
     db.add(assistant_message)
     db.commit()
     db.refresh(assistant_message)
@@ -269,18 +290,24 @@ async def send_message_stream(chat_id: str, request: ChatMessageRequest, db: Ses
         chat.title = new_title
         db.commit()
 
+    model_id = resolve_model_id(chat.model)
+
     async def generate():
         full_response = ""
-        async for chunk in gemini_service.generate_response_stream(
-            message=request.message,
-            history=history,
-            context=context,
-            system_prompt=system_prompt,
-        ):
-            full_response += chunk
-            yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+        try:
+            async for chunk in get_llm_service(model_id).generate_response_stream(
+                message=request.message,
+                history=history,
+                context=context,
+                system_prompt=system_prompt,
+            ):
+                full_response += chunk
+                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': _classify_send_error(e, model_id)})}\n\n"
+            return
 
-        assistant_message = Message(chat_id=chat_id, role=MessageRole.ASSISTANT, content=full_response)
+        assistant_message = Message(chat_id=chat_id, role=MessageRole.ASSISTANT, content=full_response, model=model_id)
         db.add(assistant_message)
         db.commit()
 
@@ -290,6 +317,6 @@ async def send_message_stream(chat_id: str, request: ChatMessageRequest, db: Ses
             metadata={"chat_id": chat_id, "role": "assistant"},
         )
 
-        yield f"data: {json.dumps({'done': True, 'message_id': assistant_message.id, 'title': new_title})}\n\n"
+        yield f"data: {json.dumps({'done': True, 'message_id': assistant_message.id, 'title': new_title, 'model': model_id})}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")

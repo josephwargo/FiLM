@@ -2,7 +2,7 @@
 CTX — RAG / Context System test suite
 Maps to: docs/products/rag_context_PRD.md
 
-Test IDs: CTX-001 … CTX-019
+Test IDs: CTX-001 … CTX-023
 """
 from unittest.mock import patch, MagicMock
 import io
@@ -268,7 +268,7 @@ def test_recursive_chat_context_pulls_sub_attachments(client):
         json={"chat_id": chat_a_id, "source_type": "chat", "source_id": chat_b_id},
     )
 
-    with patch("app.routers.chats.gemini_service", mock_gemini):
+    with patch("app.routers.chats.get_llm_service", lambda _mid: mock_gemini):
         client.post(f"/api/chats/{chat_a_id}/messages", json={"message": "Hello"})
 
     # The file attached to Chat B should appear in Chat A's resolved context
@@ -344,7 +344,7 @@ def test_shared_chat_not_duplicated_across_muse_and_per_chat(client):
         json={"chat_id": chat_id, "source_type": "chat", "source_id": source_id},
     )
 
-    with patch("app.routers.chats.gemini_service", mock_gemini):
+    with patch("app.routers.chats.get_llm_service", lambda _mid: mock_gemini):
         client.post(f"/api/chats/{chat_id}/messages", json={"message": "Go"})
 
     ctx = captured.get("context") or ""
@@ -422,7 +422,7 @@ def test_slice_excludes_messages_outside_range(client):
         json={"start_message_id": u1, "end_message_id": u1},
     )
 
-    with patch("app.routers.chats.gemini_service", mock_gemini):
+    with patch("app.routers.chats.get_llm_service", lambda _mid: mock_gemini):
         client.post(f"/api/chats/{tgt}/messages", json={"message": "Go"})
 
     ctx = captured.get("context") or ""
@@ -462,7 +462,7 @@ def test_slice_end_only_includes_from_start(client):
         json={"end_message_id": u1},
     )
 
-    with patch("app.routers.chats.gemini_service", mock_gemini):
+    with patch("app.routers.chats.get_llm_service", lambda _mid: mock_gemini):
         client.post(f"/api/chats/{tgt}/messages", json={"message": "Go"})
 
     ctx = captured.get("context") or ""
@@ -499,7 +499,7 @@ def test_slice_with_unknown_message_id_falls_back(client):
         json={"start_message_id": "does-not-exist-1", "end_message_id": "does-not-exist-2"},
     )
 
-    with patch("app.routers.chats.gemini_service", mock_gemini):
+    with patch("app.routers.chats.get_llm_service", lambda _mid: mock_gemini):
         r = client.post(f"/api/chats/{tgt}/messages", json={"message": "Go"})
     assert r.status_code == 200
 

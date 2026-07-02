@@ -14,6 +14,15 @@ class SourceType(str, Enum):
     FILE = "file"
 
 
+# Model manager schemas
+class CredentialPayload(BaseModel):
+    value: str
+
+
+class ModelPrefUpdate(BaseModel):
+    enabled: bool
+
+
 # Message schemas
 class MessageBase(BaseModel):
     role: MessageRole
@@ -29,6 +38,7 @@ class MessageResponse(MessageBase):
 
     id: str
     chat_id: str
+    model: Optional[str] = None
     timestamp: datetime
 
 
@@ -46,6 +56,7 @@ class ChatUpdate(BaseModel):
     title: Optional[str] = None
     folder_id: Optional[str] = None
     muse_id: Optional[str] = None
+    model: Optional[str] = None
 
 
 class ChatResponse(ChatBase):
@@ -53,6 +64,7 @@ class ChatResponse(ChatBase):
 
     id: str
     muse_id: Optional[str] = None
+    model: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     messages: List[MessageResponse] = []

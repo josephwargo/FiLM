@@ -1,13 +1,17 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, User, Bot, FolderTree, Paperclip, Wand2 } from 'lucide-react';
+import { Send, Loader2, User, Bot, FolderTree, Paperclip, Wand2, AlertTriangle, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import { useChatStore } from '../store/chatStore';
+import { ModelPicker } from './ModelPicker';
 
 const MD_PLUGINS = [rehypeHighlight];
 
 export function ChatArea() {
-  const { currentChat, isSending, streamingContent, sendMessage, createChat } = useChatStore();
+  const {
+    currentChat, models, isSending, streamingContent, sendMessage, createChat,
+    sendError, clearSendError, openModelManager,
+  } = useChatStore();
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -34,8 +38,40 @@ export function ChatArea() {
     }
   };
 
+  const providerName = (p: string | null) =>
+    p ? { google: 'Google', anthropic: 'Anthropic', openai: 'OpenAI', ollama: 'Ollama' }[p] ?? p : 'The provider';
+
   const inputBox = (placeholder: string) => (
     <div className="chat-input-container">
+      {sendError && (
+        <div className={`send-error-banner ${sendError.type === 'auth' ? 'send-error-auth' : ''}`}>
+          <AlertTriangle size={15} />
+          <div className="send-error-text">
+            <strong>
+              {sendError.type === 'auth'
+                ? `${providerName(sendError.provider)} rejected the API key`
+                : `${providerName(sendError.provider)} couldn't respond`}
+            </strong>
+            <span>
+              {sendError.type === 'auth'
+                ? 'The key may be missing, invalid, or expired. Fix it in the Model Manager, then resend.'
+                : sendError.message}
+            </span>
+          </div>
+          <button
+            className="send-error-action"
+            onClick={() => {
+              clearSendError();
+              openModelManager();
+            }}
+          >
+            Open Model Manager
+          </button>
+          <button className="send-error-dismiss" onClick={clearSendError} title="Dismiss">
+            <X size={14} />
+          </button>
+        </div>
+      )}
       <div className="chat-input-wrapper">
         <textarea
           className="chat-input"
@@ -88,10 +124,19 @@ export function ChatArea() {
     );
   }
 
+  const assistantModels = new Set(
+    currentChat.messages
+      .filter((m) => m.role === 'assistant' && m.model)
+      .map((m) => m.model)
+  );
+  const showProvenance = assistantModels.size > 1;
+  const modelName = (id: string) => models.find((m) => m.id === id)?.name ?? id;
+
   return (
     <div className="chat-area">
       <div className="chat-header">
         <h2>{currentChat.title}</h2>
+        <ModelPicker />
       </div>
 
       <div className="chat-messages">
@@ -110,6 +155,9 @@ export function ChatArea() {
               </div>
               <div className="message-content">
                 <ReactMarkdown rehypePlugins={MD_PLUGINS}>{message.content}</ReactMarkdown>
+                {showProvenance && message.role === 'assistant' && message.model && (
+                  <div className="message-model-label">{modelName(message.model)}</div>
+                )}
               </div>
             </div>
           ))

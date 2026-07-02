@@ -1032,3 +1032,58 @@ Verified: 63/63 pytest, `tsc --noEmit` clean, production `vite build` clean. Bro
 **User:** "Can you make the 'current context' above the 'muse selector', and make it super visually apparent that it is DIFFERENT (describes current state) than the Muse Selector and file uploads."
 
 **Assistant:** Reordered the Context panel: Current Context now sits directly under the panel header, above everything else. Restyled it as a **status card** — solid indigo fill (up from 4% to 10% tint), 1px solid border with a 3px indigo left accent bar (dropping the dashed "drop-zone" border, which read as a control), and a pill-shaped "ACTIVE NOW" badge in its header. Between it and the controls sits a new labeled rule — "ADD & CONFIGURE" — followed by the Muse picker, File Folders, and Unfiled Files, so the panel reads as: *state on top, tools below*. New CSS: `.current-context-live-badge`, `.context-tools-divider`. `tsc` + `vite build` clean.
+
+---
+
+**User:** "Please move the Muse Selector — with the exact same functionality — into the 'Current Context' section, and have it overwrite the existing 'From Muse xyz'."
+
+**Assistant:** The MusePicker now lives *inside* the Current Context status card, replacing the "From Muse ‹name›" header of the violet muse group. When a chat is selected, the violet group always renders with the picker trigger on top; if the active Muse has pinned context, the read-only pinned items and "Edit in Muse Library" link render beneath it — so selecting a Muse and seeing what it contributes happen in the same block. The standalone picker below the "ADD & CONFIGURE" divider was removed (the divider now covers only File Folders + Unfiled Files). Since the zone is hidden in the Muse editor, the picker is too — muse management there happens in the middle column. CSS: `.muse-picker-panel` outer margin dropped (embedded now), dead `.muse-context-group-header` styles deleted, and the trigger gets a solid `--bg-secondary` fill inside the violet group so the active (violet) state doesn't blend into the group background. `tsc` + `vite build` clean.
+
+---
+
+**User:** Asked whether the architecture supports multiple LLM models (are embeddings model-specific?), then: "Can you please build out a PRD for a model selector that I can take a look at?"
+
+**Assistant:** Confirmed embeddings are model-agnostic (all-MiniLM-L6-v2 runs locally, independent of the chat LLM; only `gemini_service.py` is provider-specific — the embedding model itself is the one thing that can't be swapped without a full re-embed). Wrote `docs/products/model_selector_PRD.md` (Draft): per-chat `model` field (null = default, PATCH like `muse_id`), `GET /api/models` catalog with per-provider availability flags, an `LLMService` adapter abstraction (Gemini/Anthropic/OpenAI/Ollama) mapping system prompts + history per provider, `Message.model` provenance stamps, selector as a pill in the chat header (keeps the Current Context card a pure status surface). Phased: Gemini-models-only first, multi-provider second. Added to Master PRD product table (also corrected stale Chat Slicing / Muses statuses to Complete).
+
+---
+
+**User:** Reviewed the PRD, added a "Model Manager" feature (add/remove provider models with API-key validation, surfaced key failures), then: "Please go ahead and implement Phase 1 only."
+
+**Assistant:** Implemented Model Selector Phase 1 (Gemini-only; the Model Manager rides with Phase 2's multi-provider API keys).
+
+Backend:
+- New `app/services/llm/` package replacing `gemini_service.py`: `base.py` (`LLMService` interface), `gemini.py` (`GeminiService(model_name)` — the old service, now parameterized per model), `catalog.py` (static `MODELS` list: Gemini 2.5 Flash [default], 2.5 Pro, 2.5 Flash-Lite; `resolve_model_id()` falls back to the default for unknown/retired ids without rewriting the stored preference; `get_llm_service(model_id)` caches one adapter per model; `list_models()` adds `available` + `is_default` flags).
+- New `GET /api/models` router; `Chat.model` and `Message.model` nullable columns + two inline migrations (**backend restart required**).
+- PATCH `/api/chats/:id` accepts `model` with the same clear-with-`""` semantics as `muse_id`. Both send paths resolve the chat's model, route through `get_llm_service`, stamp the resolved id on the assistant `Message`, and the SSE done event now carries `model`.
+- Tests: all mocks re-seamed from `patch(...gemini_service)` to `patch(...get_llm_service)`; new `test_models.py` MODEL-001…005 (catalog shape/single default, PATCH+clear, routing+provenance, retired-id fallback with preference preserved, SSE done carries model). Suite now 68/68 passing.
+
+Frontend:
+- New `ModelPicker.tsx` — pill in the chat header (Sparkles icon + effective model name): dropdown with a "Default (Gemini 2.5 Flash)" first option, provider-grouped models with descriptions, disabled "no API key" entries, a warning note when the stored model id is retired, and click-outside-to-close.
+- Provenance: assistant messages show a small model label, but only when the chat contains responses from more than one model (no noise in single-model chats).
+- `types` (`ModelInfo`, `Chat.model`, `Message.model`), `modelsAPI.list()`, `chatsAPI.update` accepts `model`, `streamMessage` `onDone` gains the model id, store gains `models` / `loadModels()` / `setChatModel()` and stamps the model on streamed assistant messages. `loadModels()` runs on app mount.
+
+Verified: 68/68 pytest, `tsc --noEmit` clean, production `vite build` clean. PRD Phase 1 flipped to Implemented.
+
+---
+
+**User:** "Great! Seems to be working. Let's implement phase 2 now" (scope confirmed: API keys entered in-app and stored in SQLite with `.env` fallback; Ollama included after clarifying it runs local *chat* models — embeddings stay on local all-MiniLM-L6-v2 regardless).
+
+**Assistant:** Implemented Model Selector Phase 2 — multi-provider adapters + the Model Manager.
+
+Backend:
+- Two new tables (via `create_all`, no migrations): `provider_credentials` (provider → API key, or base URL for Ollama) and `model_prefs` (per-model enabled flag; absence of a row = provider default — Google on, others opt-in).
+- New `llm/credentials.py`: `get_credential()` resolves DB row first, then env var (`GEMINI_API_KEY` / `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `OLLAMA_BASE_URL`); `validate_credential()` makes a cheap live call (models.list per SDK, `GET /api/tags` for Ollama) before anything is stored.
+- Three new adapters: `anthropic_svc.py` (system param + streaming via `messages.stream`), `openai_svc.py` (system message + chat.completions delta stream), `ollama_svc.py` (no SDK — plain httpx against `/api/chat`, JSON-lines streaming, 300s timeout). `gemini.py` now takes an injected key. All SDK imports are guarded so a missing package can't crash startup.
+- `catalog.py` rewritten: 9 curated static models (Gemini 2.5 Flash/Pro/Flash-Lite, Claude Opus 4.7/Sonnet 4.6/Haiku 4.5, GPT-5.5/5.4-mini/5.4-nano) + live Ollama discovery (`ollama:<tag>` ids, 30s cache, only queried when a URL is configured). `resolve_model_id` treats disabled models like retired ones (fall back to default, stored preference preserved). Adapter cache keyed on `model_id::credential` so saving a new key drops stale clients.
+- Models router: `GET /api/models/catalog` (all models + enabled flags + per-provider configured/source status + discovered Ollama tags), `PUT`/`DELETE /api/models/providers/{p}/credential` (PUT validates live, 400 with the provider's error on failure), `PATCH /api/models/{id}` (enable/disable).
+- Structured send failures: both send paths classify errors as `auth` (401/403 or key-related text) vs `provider` — HTTP returns 502 with a `{type, provider, model, message}` detail; SSE emits a `data: {"error": {...}}` event and persists no assistant message.
+- Tests MODEL-006…013 (catalog defaults, enable/disable + picker + fallback, credential validation/save/delete, env fallback, Ollama discovery + routing, auth-error shape on both paths, blank-credential 400). Suite now **76/76 passing**.
+- `package_requirements.txt`: + `anthropic`, `openai` (Ollama needs no SDK). **Run `pip install anthropic openai` in the venv** (already done locally).
+
+Frontend:
+- New `ModelManager.tsx` — full-page middle-column view (same chrome as the Muse Library): a section per provider with a status chip (Key saved / Key from .env / Not configured), password-style key input with **validate-on-save** (spinner + "Checking the key with a quick live call...", inline provider error on failure, green "Validated and saved"), remove-key button (DB-stored keys only), and click-to-toggle model rows (check/circle, default badge, "no key" warning on enabled-but-unconfigured models). The Ollama section takes a server URL, shows connection status + discovered model tags as chips, and has a re-check button.
+- Picker entry point: "Manage Models" footer button in the ModelPicker dropdown.
+- Send-failure banner above the chat input: auth failures get "‹Provider› rejected the API key" + an **Open Model Manager** action; other provider errors show the message. Powered by new `sendError` store state — `streamMessage` now parses SSE `data.error` and `fetchAPI` handles structured (object) error details.
+- Store: `view` gains `'model-manager'`, `openModelManager()` / `closeModelManager()`; toggles and key saves refresh both the catalog and the picker's model list.
+
+Verified: 76/76 pytest, `tsc --noEmit` clean, production `vite build` clean.
