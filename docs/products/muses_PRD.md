@@ -1,13 +1,13 @@
 # Muses — PRD
 
 **Part of:** [FiLM Master PRD](../Master_PRD.md)
-**Status:** In Progress (Phase 5)
+**Status:** Complete (last updated 2026-06-28)
 
 ---
 
 ## Overview
 
-A Muse is a named AI personality you define once and reuse across chats. You give it a name, a system prompt that shapes how it responds, and optionally **pinned context** — files and past chats that are always included when the Muse is active. Think of it as a pre-configured AI role: "Product Manager mode trained on my PRDs" or "Code Reviewer that knows our conventions."
+A Muse is a named AI personality you define once and reuse across chats. You give it a name, an optional description, a system prompt that shapes how it responds, and **pinned context** — files and past chats that are always included when the Muse is active. Think of it as a pre-configured AI role: "Product Manager mode trained on my PRDs" or "Code Reviewer that knows our conventions."
 
 ---
 
@@ -21,48 +21,62 @@ Even with RAG context attached, every chat starts with a blank-slate AI. Users w
 
 - As a user, I can create a Muse by giving it a name, an optional description, and a system prompt
 - As a user, I can drag files and chats onto a Muse to pin them as permanent context for that Muse
+- As a user, I can drag a whole chat folder or file folder to bulk-pin all its contents
 - As a user, I can remove pinned context from a Muse
 - As a user, I can assign a Muse to a chat from the chat header
 - As a user, I can switch or remove a Muse on an existing chat without losing message history
 - As a user, I can edit or delete Muses I've created
-- As a user, I can see at a glance which Muse is active in a chat
+- As a user, I can see at a glance which Muse is active in a chat, and how many chats are using each Muse
 
 ---
 
 ## Functional Requirements
 
-### Implemented (baseline)
+### Muse CRUD
 - [x] Muse creation — name, description, system prompt
-- [x] Muse CRUD — list, edit, delete via MusePicker dropdown in chat header
+- [x] Muse list, edit, delete via Muse Library page and MusePicker dropdown
 - [x] Muse assignment — per-chat; stored as `muse_id` FK in SQLite
+- [x] Deleting a Muse unassigns it from every chat (chats keep their history)
 - [x] System prompt injection — sent to Gemini via `GenerateContentConfig(system_instruction=...)` on every message
 - [x] MusePicker — dropdown in chat header to assign/create/edit/delete Muses
 
-### New: Muse Editor page with pinned context
-- [ ] Dedicated **Muse Library** page — a full-screen view listing all Muses
-- [ ] Each Muse card shows: name, description, system prompt (truncated), pinned context items, and which chats are using it
-- [ ] Clicking a Muse opens a **Muse Editor** panel (or expands inline) with:
-  - Editable name, description, system prompt fields
-  - A **Pinned Context** zone — a drop target accepting files and chats dragged from the sidebar or file panel
-  - List of pinned items (file or chat) with individual remove buttons
-- [ ] Drag & drop: user drags a file or chat from the LHS/RHS panels and drops it onto a Muse card or into the Pinned Context zone
-- [ ] Pinned context is stored in SQLite as a `muse_context` join table (many-to-many: muse ↔ file or chat)
-- [ ] When a Muse is active in a chat, its pinned context is prepended to the per-chat context before every Gemini call
-- [ ] Pinned context stacks on top of per-chat context (it does not replace it)
+### Muse Library page
+- [x] Dedicated full-screen Muse Library view, accessible from a topbar "Muses" button (toggles between Muse Library and the normal chat view)
+- [x] Three-column layout: Muse list (left) · Muse Editor (middle) · draggable source panel (right)
+- [x] Each Muse card in the list shows name, description, and the count of chats currently using it
+- [x] Clicking a Muse card opens it in the inline editor; "+ New Muse" starts an empty editor
+- [x] Editor fields: editable name, description (optional), system prompt
+- [x] Save button is disabled until name + system prompt are filled and the form is dirty (or a new Muse)
+- [x] Delete button on the editor header removes the Muse (with the unassign-from-chats behavior above)
+
+### Pinned context
+- [x] Pinned Context drop zone inside the Muse Editor
+- [x] List of pinned items with per-item remove (unpin) button; each item shows whether it's a file or a chat
+- [x] Drag-and-drop sources:
+  - From the right-hand draggable source panel inside Muse Library (chats organized by folder tree, plus a flat file list)
+  - Drag a single chat → pins the chat
+  - Drag a single file → pins the file
+  - Drag a chat folder → recursively pins every chat inside it (including nested subfolders)
+  - Drag a file folder → pins every file in that file folder
+- [x] Drop-zone visual feedback on dragover
+- [x] Pinning is idempotent — re-pinning the same source is a no-op (both frontend and backend)
+- [x] Pinned context is stored in SQLite as a `muse_contexts` join table
+- [x] When a Muse is active in a chat, its pinned context is prepended to per-chat context before every Gemini call (stacks on top, does not replace)
+- [x] Pinned context flows through the same recursive resolver as per-chat context, with a shared `visited` set so a chat referenced from both Muse and per-chat context is injected exactly once
 
 ---
 
 ## Non-Functional Requirements
 
-- Muses are stored locally; no cloud sync required for v1
+- Muses are stored locally; no cloud sync
 - Switching Muses on an existing chat must not delete message history
-- Pinned context injection must follow the same format as per-chat context attachments (so it's easy to reason about what's in the prompt)
+- Pinned context injection uses the same format as per-chat context attachments (so it's easy to reason about what's in the prompt)
+- Pinning requires the Muse to exist first — the drop zone is disabled when creating a new (unsaved) Muse
 
 ---
 
 ## Data Model
 
-### Current schema
 ```
 Muse:
   id:            string (UUID, PK)
@@ -71,56 +85,59 @@ Muse:
   system_prompt: string
   created_at:    datetime
 
-Chat:
-  + muse_id:     string | null (FK → Muse)
-```
+  pinned_context: MuseContext[]   # relationship, cascade delete
 
-### New: pinned context join table
-```
-MuseContext:
+Chat:
+  muse_id: string | null (FK → Muse, nullable)
+
+MuseContext:                       # table: muse_contexts
   id:          string (UUID, PK)
-  muse_id:     string (FK → Muse, CASCADE DELETE)
+  muse_id:     string (FK → Muse, cascade delete)
   source_type: enum ("chat" | "file")
   source_id:   string (ID of the chat or uploaded file)
   created_at:  datetime
 ```
 
-Migration: `CREATE TABLE IF NOT EXISTS muse_contexts (...)` at startup.
+Inline migration in `backend/main.py` adds `chats.muse_id` if missing; `Base.metadata.create_all` creates `muses` and `muse_contexts` on startup.
 
 ---
 
-## API Changes
+## API
 
-### Existing endpoints (already built)
+All endpoints live under `/api/muses`.
+
+### Muses
 ```
 GET    /api/muses              → list all Muses
-POST   /api/muses              → create Muse
+POST   /api/muses              → create Muse           {name, description?, system_prompt}
 GET    /api/muses/:id          → get Muse
 PATCH  /api/muses/:id          → update name / description / system_prompt
 DELETE /api/muses/:id          → delete Muse (unassigns from all chats)
 ```
 
-### New: pinned context on a Muse
+### Pinned context
 ```
 GET    /api/muses/:id/context
   → list pinned context items for a Muse
 
 POST   /api/muses/:id/context
   Body: { source_type: "chat" | "file", source_id: string }
-  → pin a file or chat to the Muse
+  → pin a file or chat to the Muse (idempotent — returns existing pin if already pinned)
 
 DELETE /api/muses/:id/context/:context_id
   → unpin a specific item
 ```
 
-### Context loading change (chats.py)
-Context loading is recursive. A single `_resolve_context(db, chat)` helper handles both Muse pinned context and per-chat context using a shared `_build_context_parts()` recursive function:
+### Context resolution (in `routers/chats.py`)
+A single `_resolve_context(db, chat)` helper returns `(context_parts, system_prompt)`:
 
 ```
 _resolve_context(chat):
   visited = {chat.id}          # never inject the current chat into itself
-  1. Muse pinned context → _build_context_parts(muse_pairs, visited)
-  2. Per-chat context    → _build_context_parts(chat_pairs, visited)
+  if chat has a Muse:
+    system_prompt = muse.system_prompt
+    prepend Muse pinned context via _build_context_parts(muse_pairs, visited)
+  append per-chat context via _build_context_parts(chat_pairs, visited)
 
 _build_context_parts(pairs, visited, depth):
   for each (source_type, source_id):
@@ -130,98 +147,77 @@ _build_context_parts(pairs, visited, depth):
       if depth < MAX_CONTEXT_DEPTH:
         recurse into that chat's own ContextAttachments
     if FILE:
-      fetch content from ChromaDB
+      fetch content from ChromaDB; silently skip if missing
 ```
 
-- Max depth: 3 (constant `MAX_CONTEXT_DEPTH` in `routers/chats.py`)
-- `visited` is shared across Muse + per-chat context, so a chat pinned to both is only injected once
+- `MAX_CONTEXT_DEPTH = 3` (constant in `routers/chats.py`)
+- `visited` is shared across Muse + per-chat context, so a chat pinned to both is injected once
+- Missing source files/chats are silently skipped (no error)
 
 ---
 
 ## UI / UX
 
 ### Entry point
-A **"Muse Library"** link in the topbar or sidebar footer. Clicking it navigates to (or overlays) the Muse Library page.
+A **"Muses"** button in the topbar (with a `Wand2` icon) toggles between the normal chat workspace and the Muse Library view. The button highlights when the library is open.
 
-### Muse Library layout
+### Muse Library layout (three columns)
 ```
-┌─────────────────────────────────────────────────────┐
-│  Muse Library                          [+ New Muse] │
-├─────────────────────────────────────────────────────┤
-│  ┌──────────────────┐  ┌──────────────────┐         │
-│  │ PM Mode          │  │ Code Reviewer    │  ...    │
-│  │ "You are a PM…"  │  │ "Review code…"   │         │
-│  │ 2 chats active   │  │ 1 chat active    │         │
-│  │ [Edit] [Delete]  │  │ [Edit] [Delete]  │         │
-│  └──────────────────┘  └──────────────────┘         │
-└─────────────────────────────────────────────────────┘
-```
-
-### Muse Editor (inline expansion or side panel)
-```
-┌─────────────────────────────────────────────────────┐
-│ Name:         [ PM Mode                           ] │
-│ Description:  [ Acts as a product manager…        ] │
-│ System prompt:                                      │
-│ ┌─────────────────────────────────────────────────┐ │
-│ │ You are an experienced product manager. Always  │ │
-│ │ respond with structured thinking…               │ │
-│ └─────────────────────────────────────────────────┘ │
-│                                                     │
-│ Pinned Context  ← drop files or chats here          │
-│ ┌─────────────────────────────────────────────────┐ │
-│ │  📄 product_requirements.md          [✕]        │ │
-│ │  💬 Q2 Planning Chat                 [✕]        │ │
-│ │  ┄ ┄ ┄ drag files or chats here ┄ ┄ ┄          │ │
-│ └─────────────────────────────────────────────────┘ │
-│                              [Cancel]  [Save Muse]  │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  Muses [+]   │  New Muse                                  [Delete]   │
+│              │                                                       │
+│  ┌────────┐  │  Name:         [ PM Mode                          ]   │
+│  │ PM Mode│  │  Description:  [ Acts as a product manager…       ]   │
+│  │ 2 chats│  │  System prompt:                                       │
+│  └────────┘  │  ┌─────────────────────────────────────────────────┐  │
+│  ┌────────┐  │  │ You are an experienced PM. Respond with…        │  │
+│  │ Code   │  │  └─────────────────────────────────────────────────┘  │
+│  │Reviewer│  │                                                       │
+│  │ 1 chat │  │  Pinned Context — drag from the panel on the right    │
+│  └────────┘  │  ┌─────────────────────────────────────────────────┐  │
+│              │  │  📄 product_requirements.md            [✕]      │  │
+│              │  │  💬 Q2 Planning Chat                    [✕]      │  │
+│              │  │  ┄ Drop more here ┄                             │  │
+│              │  └─────────────────────────────────────────────────┘  │
+│              │                              [Save Muse]              │
+└──────────────────────────────────────────────────────────────────────┘
+   Left column                Middle column (editor)
+                                         + Right column: draggable
+                                           Chats (by folder) and Files
 ```
 
-### Drag & drop
-- Files and chats dragged from the sidebar or file panel can be dropped onto the **Pinned Context** zone in the Muse Editor
-- Same dataTransfer keys as the existing drag system (`chatId`, `folderId`, `contextType`, `contextId`)
-- Dropping a folder pins all its files/chats (same bulk-attach pattern as the context panel)
-- Visual feedback: drop zone highlights on hover
+The right column holds a self-contained tree of chat folders + unfiled chats and a list of uploaded files, all draggable into the Pinned Context zone. Users do not need to drag from the main app sidebar.
 
-### MusePicker (existing — no change needed)
-Active Muse shown in chat header. Badge shows the Muse name when one is active.
+### Drag & drop dataTransfer keys
+Identical to the existing drag system in the rest of the app:
+- `chatId` — a single chat
+- `folderId` — a chat folder (pins every chat inside it, recursively)
+- `contextType: "file"` + `contextId` — a single file
+- `contextType: "file-folder"` + `contextId` — a file folder (pins every file in that folder)
+
+### MusePicker (chat header)
+Unchanged. Shows the active Muse on each chat; lets the user assign, switch, create, edit, or remove a Muse without leaving the chat.
 
 ---
 
-## Implementation Approach
+## Resolved Design Questions
 
-1. **Backend — MuseContext model + migration** — add `muse_contexts` table; add pinned context endpoints
-2. **Backend — context loading** — prepend Muse pinned context to per-chat context in both send endpoints
-3. **Frontend types** — add `MuseContext` interface; add `pinned_context` to `Muse`
-4. **Frontend API** — add `muses.getContext`, `muses.pinContext`, `muses.unpinContext`
-5. **MuseLibrary page** — new route/view; Muse cards with edit/delete
-6. **MuseEditor component** — inline editor with pinned context drop zone + drag & drop wiring
-7. **Navigation** — add Muse Library entry point (topbar or sidebar footer)
-
----
-
-## Open Questions
-
-| Question | Options | Recommendation |
-|----------|---------|----------------|
-| Does Muse pinned context replace or stack with per-chat context? | Replace / Stack | Stack — Muse is additive background knowledge |
-| Where does Muse Library live in the nav? | Topbar link / Sidebar footer icon / Dedicated route | Topbar link keeps it accessible without cluttering sidebar |
-| Can you pin a whole folder to a Muse? | Yes / No | Yes — same pattern as bulk-attach in context panel |
-| What happens to pinned context if the source is deleted? | Error / Silently skip | Silently skip (same as per-chat attachment behavior) |
+| Question | Resolution |
+|----------|------------|
+| Does Muse pinned context replace or stack with per-chat context? | **Stack** — Muse pinned context is prepended; per-chat context is appended; a shared `visited` set dedupes |
+| Where does Muse Library live in the nav? | **Topbar button** that toggles between chat view and library view |
+| Can you pin a whole folder to a Muse? | **Yes** — both chat folders (recursive) and file folders are supported |
+| What happens to pinned context if the source is deleted? | **Silently skipped** at resolution time (same as per-chat attachments) |
+| What if a chat is referenced from both Muse pinned context and per-chat context? | Injected **once** thanks to the shared `visited` set across resolvers |
+| Where do users drag pinned-context sources from? | **Right-hand source panel** inside the Muse Library — self-contained, no need to drag from the main sidebar |
 
 ---
 
-## Effort Estimate
+## Notable deltas from the original spec
 
-*All estimates are Claude implementation time, not human-hours.*
+These are intentional improvements over the initial design:
 
-| Area | Work |
-|------|------|
-| Backend: MuseContext model + endpoints | ~10 min |
-| Backend: context loading update | ~5 min |
-| Frontend: types + API service | ~5 min |
-| MuseLibrary page + MuseEditor component | ~20 min |
-| Drag & drop wiring | ~10 min |
-| Navigation entry point | ~5 min |
-| **Total** | **~55 min** |
+1. **Three-column layout** instead of a card grid + separate editor panel. The Muse list, editor, and draggable source live side-by-side in a single view.
+2. **Dedicated source panel** in the right column so users can drag chats and files without leaving the Muse Library.
+3. **Idempotent pinning** on the backend — re-pinning the same source returns the existing record instead of erroring.
+4. **Cascade delete** on `MuseContext` via the SQLAlchemy relationship, so deleting a Muse cleans up its pinned-context rows.

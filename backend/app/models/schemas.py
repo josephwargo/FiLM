@@ -45,6 +45,9 @@ class MuseContext(Base):
     muse_id = Column(String, ForeignKey("muses.id"), nullable=False)
     source_type = Column(Enum(SourceType), nullable=False)
     source_id = Column(String, nullable=False)
+    # Slice bounds — only meaningful when source_type == CHAT. Null = unbounded on that side.
+    start_message_id = Column(String, nullable=True)
+    end_message_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
 
     muse = relationship("Muse", back_populates="pinned_context")
@@ -101,6 +104,9 @@ class ContextAttachment(Base):
     chat_id = Column(String, ForeignKey("chats.id"), nullable=False)
     source_type = Column(Enum(SourceType), nullable=False)
     source_id = Column(String, nullable=False)
+    # Slice bounds — only meaningful when source_type == CHAT. Null = unbounded on that side.
+    start_message_id = Column(String, nullable=True)
+    end_message_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
 
     # Relationships

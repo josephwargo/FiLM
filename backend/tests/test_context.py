@@ -350,3 +350,158 @@ def test_shared_chat_not_duplicated_across_muse_and_per_chat(client):
     ctx = captured.get("context") or ""
     # "Shared Source" header should appear exactly once
     assert ctx.count("Shared Source") == 1
+
+
+# ── CTX-020 ───────────────────────────────────────────────────────────────────
+
+def test_slice_patch_updates_bounds(client):
+    """CTX-020 [P0 smoke]: PATCH /api/context/attachments/:id updates start/end message IDs."""
+    src = client.post("/api/chats", json={"title": "Source"}).json()["id"]
+    tgt = client.post("/api/chats", json={"title": "Target"}).json()["id"]
+    att = client.post(
+        "/api/context/attach",
+        json={"chat_id": tgt, "source_type": "chat", "source_id": src},
+    ).json()
+
+    assert att["start_message_id"] is None and att["end_message_id"] is None
+
+    r = client.patch(
+        f"/api/context/attachments/{att['id']}",
+        json={"start_message_id": "msg-A", "end_message_id": "msg-B"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["start_message_id"] == "msg-A"
+    assert data["end_message_id"] == "msg-B"
+
+    # Clearing one bound to null leaves the other intact
+    r = client.patch(
+        f"/api/context/attachments/{att['id']}",
+        json={"start_message_id": None},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["start_message_id"] is None
+    assert data["end_message_id"] == "msg-B"
+
+
+# ── CTX-021 ───────────────────────────────────────────────────────────────────
+
+def _send(client, chat_id: str, message: str) -> tuple[str, str]:
+    """Send a message; return (user_message_id, assistant_message_id)."""
+    r = client.post(f"/api/chats/{chat_id}/messages", json={"message": message})
+    body = r.json()
+    return body["user_message_id"], body["message_id"]
+
+
+def test_slice_excludes_messages_outside_range(client):
+    """CTX-021 [P0 smoke]: A sliced chat attachment injects only the messages within the bounds."""
+    captured = {}
+
+    def fake_generate(message, history, context=None, system_prompt=None):
+        captured["context"] = context
+        return "ignored"
+
+    mock_gemini = MagicMock()
+    mock_gemini.generate_response.side_effect = fake_generate
+
+    # Build a 4-message source chat: u1, a1, u2, a2
+    src = client.post("/api/chats", json={"title": "Source"}).json()["id"]
+    u1, _a1 = _send(client, src, "UNIQUE_FIRST_USER")
+    _u2, a2 = _send(client, src, "UNIQUE_SECOND_USER")
+
+    tgt = client.post("/api/chats", json={"title": "Target"}).json()["id"]
+    att = client.post(
+        "/api/context/attach",
+        json={"chat_id": tgt, "source_type": "chat", "source_id": src},
+    ).json()
+
+    # Slice to only the very first message (u1)
+    client.patch(
+        f"/api/context/attachments/{att['id']}",
+        json={"start_message_id": u1, "end_message_id": u1},
+    )
+
+    with patch("app.routers.chats.gemini_service", mock_gemini):
+        client.post(f"/api/chats/{tgt}/messages", json={"message": "Go"})
+
+    ctx = captured.get("context") or ""
+    assert "UNIQUE_FIRST_USER" in ctx
+    assert "UNIQUE_SECOND_USER" not in ctx
+    assert "(sliced)" in ctx
+    # Sanity: a2 (the very last assistant turn) should also be excluded
+    assert a2 not in ctx  # IDs aren't in the transcript, but neither is its content
+
+
+# ── CTX-022 ───────────────────────────────────────────────────────────────────
+
+def test_slice_end_only_includes_from_start(client):
+    """CTX-022 [P1]: Setting only end_message_id keeps everything from the beginning up to that point."""
+    captured = {}
+
+    def fake_generate(message, history, context=None, system_prompt=None):
+        captured["context"] = context
+        return "ignored"
+
+    mock_gemini = MagicMock()
+    mock_gemini.generate_response.side_effect = fake_generate
+
+    src = client.post("/api/chats", json={"title": "Source"}).json()["id"]
+    u1, _a1 = _send(client, src, "EARLY_TURN")
+    _u2, _a2 = _send(client, src, "LATER_TURN")
+
+    tgt = client.post("/api/chats", json={"title": "Target"}).json()["id"]
+    att = client.post(
+        "/api/context/attach",
+        json={"chat_id": tgt, "source_type": "chat", "source_id": src},
+    ).json()
+
+    # End at u1 (the very first message). Start unspecified → include from beginning.
+    client.patch(
+        f"/api/context/attachments/{att['id']}",
+        json={"end_message_id": u1},
+    )
+
+    with patch("app.routers.chats.gemini_service", mock_gemini):
+        client.post(f"/api/chats/{tgt}/messages", json={"message": "Go"})
+
+    ctx = captured.get("context") or ""
+    assert "EARLY_TURN" in ctx
+    assert "LATER_TURN" not in ctx
+
+
+# ── CTX-023 ───────────────────────────────────────────────────────────────────
+
+def test_slice_with_unknown_message_id_falls_back(client):
+    """CTX-023 [P1 regression]: A start/end message ID that doesn't exist in the source chat
+    falls back silently to the chat's natural bounds (does not error, does not lose context)."""
+    captured = {}
+
+    def fake_generate(message, history, context=None, system_prompt=None):
+        captured["context"] = context
+        return "ignored"
+
+    mock_gemini = MagicMock()
+    mock_gemini.generate_response.side_effect = fake_generate
+
+    src = client.post("/api/chats", json={"title": "Source"}).json()["id"]
+    _send(client, src, "ONLY_TURN_CONTENT")
+
+    tgt = client.post("/api/chats", json={"title": "Target"}).json()["id"]
+    att = client.post(
+        "/api/context/attach",
+        json={"chat_id": tgt, "source_type": "chat", "source_id": src},
+    ).json()
+
+    # Both bounds reference messages that don't exist — should fall back to full chat.
+    client.patch(
+        f"/api/context/attachments/{att['id']}",
+        json={"start_message_id": "does-not-exist-1", "end_message_id": "does-not-exist-2"},
+    )
+
+    with patch("app.routers.chats.gemini_service", mock_gemini):
+        r = client.post(f"/api/chats/{tgt}/messages", json={"message": "Go"})
+    assert r.status_code == 200
+
+    ctx = captured.get("context") or ""
+    assert "ONLY_TURN_CONTENT" in ctx

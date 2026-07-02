@@ -12,7 +12,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 class GeminiService:
     def __init__(self):
         self.client = genai.Client(api_key=GEMINI_API_KEY)
-        self.model_name = "gemini-2.0-flash"
+        self.model_name = "gemini-2.5-flash"
 
     def generate_response(
         self,

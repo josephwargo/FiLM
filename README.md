@@ -104,7 +104,7 @@ Both support unlimited nesting. Moving something between folders just updates a 
 
 ### How the LLM connection works
 
-FiLM uses **Gemini 2.0 Flash**. Every message is a fresh API call — Gemini is stateless, and FiLM reconstructs the full conversation history from SQLite on each send. Responses stream back word-by-word using SSE (Server-Sent Events).
+FiLM uses **Gemini 2.5 Flash**. Every message is a fresh API call — Gemini is stateless, and FiLM reconstructs the full conversation history from SQLite on each send. Responses stream back word-by-word using SSE (Server-Sent Events).
 
 ### How embeddings work
 
@@ -116,7 +116,11 @@ A Muse is a named AI personality you create and assign to a chat. You give it a 
 
 When a chat has a Muse assigned, the system prompt is injected into every Gemini call for that chat via Gemini's native system instruction channel. Switching or removing the Muse takes effect on the next message. Muses are reusable — one Muse can be applied to many different chats.
 
-The MusePicker lives in the chat header. Click it to assign a Muse, create a new one, or edit/delete existing ones.
+The Muse picker lives at the top of the right-hand Context panel — click it to assign a Muse to the current chat. All creating, editing, and deleting happens in one place: the **Muse Library** — open it via the "New Muse" / "Manage Muses" shortcuts in the picker or the pencil icon next to any Muse. The Library replaces only the middle column: the chat sidebar and Context panel stay put, so you drag chats from the left sidebar and files from the right panel straight onto a Muse's pinned context. Pinned context (chats and files, sliceable just like per-chat attachments) is staged locally — nothing persists until you hit **Save Changes**. When a Muse is active in a chat, its pinned context shows up as a read-only "From Muse" group at the top of the Context panel.
+
+### How chat slicing works
+
+Attaching a chat as context normally injects every message in that chat. If only the first part of a long chat is relevant, you can **slice** it: click the attached chat in the Current Context panel (look for the scissors icon) to expand an inline message timeline. Clicking a message sets it as the end of the slice; shift-clicking sets the start. Outside-range messages dim and only the in-range messages get sent to Gemini on the next message. Bounds are stored in SQLite, so they persist across sessions and survive re-opening the chat. Clear the slice to restore full inclusion. If a referenced message is later deleted, that bound silently falls back to the chat's natural start or end. Chats pinned to a Muse can be sliced the same way from inside the Muse Library.
 
 ### What "RAG" means
 
@@ -143,7 +147,7 @@ RAG = Retrieval-Augmented Generation. Before sending your question to the AI, ad
 
 | Layer | Technology |
 |-------|-----------|
-| LLM | Gemini 2.0 Flash (Google AI) |
+| LLM | Gemini 2.5 Flash (Google AI) |
 | Embeddings | all-MiniLM-L6-v2 (local, via Sentence Transformers) |
 | Vector DB | ChromaDB (local) |
 | Backend | FastAPI + Python |
@@ -162,7 +166,9 @@ RAG = Retrieval-Augmented Generation. Before sending your question to the AI, ad
 - [x] Virtual file system — chat folders with unlimited nesting
 - [x] RAG context system — attach chats and files as context
 - [x] File folders — organize uploaded files, attach entire folders at once
-- [x] API test suite (57 tests — chats, folders, context, Muses, recursive context)
-- [x] Muses — custom AI personalities with their own system prompts, assignable per chat
-- [ ] Chat slicing — attach only a portion of a chat's history
+- [x] API test suite (63 tests — chats, folders, context, Muses, recursive context, slicing)
+- [x] Muses — custom AI personalities with their own system prompts and pinned context, assignable per chat
+- [x] Chat slicing — attach only a portion of a chat's history via inline scissors editor
+- [x] UX flow redesign — single Muse editing surface, "From Muse" context visibility, click-to-slice, welcome guide
+- [x] Persistent layout — sidebar and Context panel always visible (with drag-resize that persists across views), Muse picker in the Context panel, staged Muse saves, Muse-context slicing
 - [ ] Search across all chats

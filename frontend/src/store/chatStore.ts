@@ -12,8 +12,12 @@ interface ChatStore {
   isSending: boolean;
   streamingContent: string | null;
   error: string | null;
+  view: 'chat' | 'muse-library';
+  museLibraryTarget: string | 'new' | null;
 
   // Actions
+  openMuseLibrary: (target?: string | 'new') => void;
+  closeMuseLibrary: () => void;
   loadChats: () => Promise<void>;
   loadFolderTree: () => Promise<void>;
   loadMuses: () => Promise<void>;
@@ -41,6 +45,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   isSending: false,
   streamingContent: null,
   error: null,
+  view: 'chat',
+  museLibraryTarget: null,
+
+  openMuseLibrary: (target?: string | 'new') =>
+    set({ view: 'muse-library', museLibraryTarget: target ?? null }),
+
+  closeMuseLibrary: () => set({ view: 'chat', museLibraryTarget: null }),
 
   loadChats: async () => {
     try {
@@ -74,7 +85,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
       const chat = await chatsAPI.get(chatId);
-      set({ currentChat: chat, isLoading: false });
+      set({ currentChat: chat, isLoading: false, view: 'chat', museLibraryTarget: null });
     } catch (error) {
       set({ error: (error as Error).message, isLoading: false });
     }

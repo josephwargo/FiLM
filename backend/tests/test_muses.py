@@ -2,7 +2,7 @@
 MUSE — Muses feature test suite
 Maps to: docs/products/muses_PRD.md
 
-Test IDs: MUSE-001 … MUSE-018
+Test IDs: MUSE-001 … MUSE-020
 """
 from unittest.mock import patch, MagicMock
 
@@ -290,3 +290,91 @@ def test_muse_pinned_context_prepended_to_llm_call(client):
 
     assert captured.get("context") is not None
     assert "pinned.txt" in captured["context"]
+
+
+# ── MUSE-019 ──────────────────────────────────────────────────────────────────
+
+def test_pin_context_with_bounds_and_patch(client):
+    """MUSE-019 [P1]: Pinning a chat with slice bounds stores them; PATCH updates and clears them."""
+    muse_id = _create_muse(client)["id"]
+    source_chat_id = _create_chat(client)["id"]
+
+    r = client.post(
+        f"/api/muses/{muse_id}/context",
+        json={
+            "source_type": "chat",
+            "source_id": source_chat_id,
+            "start_message_id": "msg-A",
+            "end_message_id": "msg-B",
+        },
+    )
+    assert r.status_code == 200
+    ctx = r.json()
+    assert ctx["start_message_id"] == "msg-A"
+    assert ctx["end_message_id"] == "msg-B"
+
+    r = client.patch(
+        f"/api/muses/{muse_id}/context/{ctx['id']}",
+        json={"end_message_id": "msg-C"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["start_message_id"] == "msg-A"
+    assert data["end_message_id"] == "msg-C"
+
+    # Clearing with explicit nulls
+    r = client.patch(
+        f"/api/muses/{muse_id}/context/{ctx['id']}",
+        json={"start_message_id": None, "end_message_id": None},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["start_message_id"] is None
+    assert data["end_message_id"] is None
+
+
+# ── MUSE-020 ──────────────────────────────────────────────────────────────────
+
+def _send(client, chat_id: str, message: str) -> tuple[str, str]:
+    """Send a message; return (user_message_id, assistant_message_id)."""
+    r = client.post(f"/api/chats/{chat_id}/messages", json={"message": message})
+    body = r.json()
+    return body["user_message_id"], body["message_id"]
+
+
+def test_sliced_muse_context_excludes_out_of_range(client):
+    """MUSE-020 [P0 smoke]: A sliced muse-pinned chat injects only the messages within the bounds."""
+    captured = {}
+
+    def fake_generate(message, history, context=None, system_prompt=None):
+        captured["context"] = context
+        return "ignored"
+
+    mock_gemini = MagicMock()
+    mock_gemini.generate_response.side_effect = fake_generate
+
+    src = _create_chat(client, title="Source")["id"]
+    u1, _a1 = _send(client, src, "MUSE_SLICE_FIRST")
+    _u2, _a2 = _send(client, src, "MUSE_SLICE_SECOND")
+
+    muse_id = _create_muse(client)["id"]
+    client.post(
+        f"/api/muses/{muse_id}/context",
+        json={
+            "source_type": "chat",
+            "source_id": src,
+            "start_message_id": u1,
+            "end_message_id": u1,
+        },
+    )
+
+    tgt = _create_chat(client, title="Target")["id"]
+    client.patch(f"/api/chats/{tgt}", json={"muse_id": muse_id})
+
+    with patch("app.routers.chats.gemini_service", mock_gemini):
+        client.post(f"/api/chats/{tgt}/messages", json={"message": "Go"})
+
+    ctx = captured.get("context") or ""
+    assert "MUSE_SLICE_FIRST" in ctx
+    assert "MUSE_SLICE_SECOND" not in ctx
+    assert "(sliced)" in ctx

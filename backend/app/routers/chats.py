@@ -24,18 +24,20 @@ MAX_CONTEXT_DEPTH = 3
 
 def _build_context_parts(
     db: Session,
-    pairs: List[Tuple],
+    refs: List[Tuple],
     visited: Set[str],
     depth: int = 0,
 ) -> List[str]:
     """
-    Recursively resolve context from (source_type, source_id) pairs.
+    Recursively resolve context from (source_type, source_id, start_message_id, end_message_id) refs.
+    start_message_id / end_message_id are only meaningful for CHAT sources; if either is missing
+    from the chat (e.g. the message was deleted), that side falls back to the chat's natural bound.
     visited tracks chat IDs already included to break cycles.
     Recurses into a chat's own attachments up to MAX_CONTEXT_DEPTH.
     Files are never recursed into (they have no attachments).
     """
     parts = []
-    for source_type, source_id in pairs:
+    for source_type, source_id, start_id, end_id in refs:
         try:
             if source_type == SourceType.CHAT:
                 if source_id in visited:
@@ -46,17 +48,35 @@ def _build_context_parts(
                 visited.add(source_id)
 
                 if source_chat.messages:
-                    transcript = f"--- Context from chat: {source_chat.title} ---\n"
-                    for msg in source_chat.messages:
-                        transcript += f"{msg.role.value}: {msg.content}\n"
-                    parts.append(transcript)
+                    messages = source_chat.messages
+                    if start_id:
+                        start_idx = next(
+                            (i for i, m in enumerate(messages) if m.id == start_id), 0
+                        )
+                        messages = messages[start_idx:]
+                    if end_id:
+                        end_idx = next(
+                            (i for i, m in enumerate(messages) if m.id == end_id),
+                            len(messages) - 1,
+                        )
+                        messages = messages[: end_idx + 1]
+
+                    if messages:
+                        slice_note = " (sliced)" if (start_id or end_id) else ""
+                        transcript = f"--- Context from chat: {source_chat.title}{slice_note} ---\n"
+                        for msg in messages:
+                            transcript += f"{msg.role.value}: {msg.content}\n"
+                        parts.append(transcript)
 
                 if depth < MAX_CONTEXT_DEPTH:
                     sub_attachments = db.query(ContextAttachment).filter(
                         ContextAttachment.chat_id == source_id
                     ).all()
-                    sub_pairs = [(a.source_type, a.source_id) for a in sub_attachments]
-                    parts.extend(_build_context_parts(db, sub_pairs, visited, depth + 1))
+                    sub_refs = [
+                        (a.source_type, a.source_id, a.start_message_id, a.end_message_id)
+                        for a in sub_attachments
+                    ]
+                    parts.extend(_build_context_parts(db, sub_refs, visited, depth + 1))
 
             elif source_type == SourceType.FILE:
                 file_record = db.query(UploadedFile).filter(UploadedFile.id == source_id).first()
@@ -89,12 +109,18 @@ def _resolve_context(db: Session, chat: Chat) -> Tuple[List[str], str | None]:
         if muse:
             system_prompt = muse.system_prompt
             muse_ctxs = db.query(MuseContext).filter(MuseContext.muse_id == chat.muse_id).all()
-            muse_pairs = [(mc.source_type, mc.source_id) for mc in muse_ctxs]
-            context_parts.extend(_build_context_parts(db, muse_pairs, visited))
+            muse_refs = [
+                (mc.source_type, mc.source_id, mc.start_message_id, mc.end_message_id)
+                for mc in muse_ctxs
+            ]
+            context_parts.extend(_build_context_parts(db, muse_refs, visited))
 
     attachments = db.query(ContextAttachment).filter(ContextAttachment.chat_id == chat.id).all()
-    chat_pairs = [(a.source_type, a.source_id) for a in attachments]
-    context_parts.extend(_build_context_parts(db, chat_pairs, visited))
+    chat_refs = [
+        (a.source_type, a.source_id, a.start_message_id, a.end_message_id)
+        for a in attachments
+    ]
+    context_parts.extend(_build_context_parts(db, chat_refs, visited))
 
     return context_parts, system_prompt
 

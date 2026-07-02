@@ -20,6 +20,11 @@
   --ctx-accent-hover: #818cf8;
   --ctx-border: rgba(99, 102, 241, 0.18);
   --ctx-highlight: rgba(99, 102, 241, 0.13);
+
+  /* Muse elements — violet, distinct from indigo per-chat context */
+  --muse-accent: #a78bfa;
+  --muse-border: rgba(167, 139, 250, 0.25);
+  --muse-highlight: rgba(167, 139, 250, 0.1);
 }
 
 /* Reset */
@@ -60,33 +65,6 @@ body {
   font-weight: 700;
   color: var(--accent);
   letter-spacing: 3px;
-}
-
-.topbar-nav-btn {
-  position: absolute;
-  right: 16px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  background: none;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  color: var(--text-secondary);
-  font-size: 0.8rem;
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
-}
-
-.topbar-nav-btn:hover {
-  color: var(--text-primary);
-  border-color: var(--border);
-}
-
-.topbar-nav-btn-active {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: rgba(233, 69, 96, 0.08);
 }
 
 .app-body {
@@ -355,6 +333,46 @@ body {
 .chat-empty-hint {
   margin-top: 16px;
   font-size: 0.9rem;
+}
+
+.welcome-cards {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.welcome-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 190px;
+  padding: 16px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.welcome-card strong {
+  color: var(--text-primary);
+  font-size: 0.85rem;
+}
+
+.welcome-card svg {
+  color: var(--accent);
+}
+
+.welcome-card:nth-child(2) svg {
+  color: var(--ctx-accent);
+}
+
+.welcome-card:nth-child(3) svg {
+  color: var(--muse-accent);
 }
 
 .message {
@@ -720,13 +738,15 @@ body {
   color: var(--error);
 }
 
-/* Current Context Drop Zone */
+/* Current Context — a STATUS card (what the AI sees right now), visually distinct
+   from the Add & Configure controls below it */
 .current-context-zone {
   margin: 12px;
   padding: 12px;
-  border: 2px dashed var(--ctx-border);
+  border: 1px solid var(--ctx-border);
+  border-left: 3px solid var(--ctx-accent);
   border-radius: 8px;
-  background-color: rgba(99, 102, 241, 0.04);
+  background-color: rgba(99, 102, 241, 0.1);
   transition: border-color 0.2s, background-color 0.2s;
 }
 
@@ -749,6 +769,50 @@ body {
   margin-bottom: 8px;
 }
 
+.current-context-live-badge {
+  margin-left: auto;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ctx-accent);
+  border: 1px solid var(--ctx-accent);
+  padding: 2px 7px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.context-tools-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 12px 0;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.context-tools-divider::before,
+.context-tools-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.context-tools-divider span {
+  flex-shrink: 0;
+}
+
+.current-context-subtitle {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  margin: -4px 0 10px;
+  line-height: 1.4;
+}
+
 .current-context-empty {
   color: var(--text-secondary);
   font-size: 0.8rem;
@@ -756,6 +820,67 @@ body {
   text-align: center;
   padding: 8px;
   opacity: 0.7;
+}
+
+/* Read-only pinned context inherited from the chat's Muse */
+.muse-context-group {
+  border: 1px solid var(--muse-border);
+  background: var(--muse-highlight);
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.muse-context-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--muse-accent);
+  overflow: hidden;
+}
+
+.muse-context-group-header span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.muse-context-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--text-primary);
+  opacity: 0.85;
+  padding-left: 2px;
+}
+
+.muse-context-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.muse-context-edit-link {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--muse-accent);
+  font-size: 0.72rem;
+  cursor: pointer;
+  padding: 2px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  opacity: 0.85;
+}
+
+.muse-context-edit-link:hover {
+  opacity: 1;
 }
 
 .current-context-items {
@@ -781,6 +906,36 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.current-context-item-clickable {
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.current-context-item-clickable:hover {
+  border-color: var(--ctx-accent);
+  background: var(--ctx-highlight);
+}
+
+.current-context-item-open {
+  border-color: var(--ctx-accent);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.slice-cue {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+  flex: 0 0 auto !important;
+  opacity: 0.7;
+}
+
+.current-context-item-clickable:hover .slice-cue,
+.slice-cue.slice-toggle-active {
+  color: var(--ctx-accent);
+  opacity: 1;
 }
 
 .context-item.draggable {
@@ -1010,9 +1165,9 @@ body {
   }
 }
 
-/* MusePicker */
-.muse-picker {
-  position: relative;
+/* MusePicker — panel variant (lives at the top of the Context panel) */
+.muse-picker-panel {
+  margin: 12px 12px 0;
   flex-shrink: 0;
 }
 
@@ -1037,40 +1192,47 @@ body {
 }
 
 .muse-trigger-active {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--muse-border);
+  color: var(--muse-accent);
+  background: var(--muse-highlight);
 }
 
-.muse-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 49;
+.muse-trigger-panel {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 0.84rem;
+  font-weight: 600;
 }
 
-.muse-dropdown {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  width: 300px;
+.muse-trigger-panel > span {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.muse-trigger-panel:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.muse-trigger-panel:disabled:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+}
+
+.muse-trigger-active.muse-trigger-panel:hover {
+  background: var(--muse-highlight);
+  color: var(--muse-accent);
+}
+
+.muse-dropdown-inline {
+  margin-top: 6px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-  z-index: 50;
+  border-radius: 8px;
   overflow: hidden;
-}
-
-.muse-dropdown-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
 }
 
 .muse-list {
@@ -1161,68 +1323,89 @@ body {
   color: var(--error);
 }
 
-.muse-form {
-  border-top: 1px solid var(--border);
-  padding: 12px;
+.muse-dropdown-footer {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  border-top: 1px solid var(--border);
 }
 
-.muse-form-header {
+.muse-footer-btn {
+  flex: 1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.muse-input {
-  width: 100%;
-  padding: 7px 10px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text-primary);
-  font-size: 0.84rem;
-  font-family: inherit;
-  outline: none;
-  transition: border-color 0.15s;
-}
-
-.muse-input:focus {
-  border-color: var(--accent);
-}
-
-.muse-textarea {
-  resize: vertical;
-  min-height: 80px;
-  line-height: 1.5;
-}
-
-.muse-submit-btn {
-  padding: 7px 12px;
-  background: var(--accent);
-  color: white;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 8px;
+  background: none;
   border: none;
-  border-radius: 6px;
-  font-size: 0.84rem;
-  font-weight: 600;
+  color: var(--muse-accent);
+  font-size: 0.8rem;
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.12s;
 }
 
-.muse-submit-btn:hover:not(:disabled) {
-  background: var(--accent-hover);
+.muse-footer-btn:hover {
+  background: var(--muse-highlight);
 }
 
-.muse-submit-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+.muse-footer-btn + .muse-footer-btn {
+  border-left: 1px solid var(--border);
 }
 
 /* MuseLibrary page */
+.muse-library-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.muse-lib-topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.muse-lib-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.muse-lib-back-btn:hover {
+  border-color: var(--muse-accent);
+  color: var(--muse-accent);
+}
+
+.muse-lib-topbar-hint {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.muse-lib-explainer {
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  margin: 2px 0 8px;
+}
+
 .muse-library {
   display: flex;
   flex: 1;
@@ -1468,11 +1651,6 @@ body {
   background: rgba(233, 69, 96, 0.05);
 }
 
-.muse-lib-drop-zone-disabled {
-  opacity: 0.5;
-  pointer-events: none;
-}
-
 .muse-lib-drop-hint {
   color: var(--text-secondary);
   font-size: 0.8rem;
@@ -1536,7 +1714,34 @@ body {
 
 .muse-lib-actions {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 12px;
+}
+
+.muse-lib-unsaved-note {
+  font-size: 0.78rem;
+  font-style: italic;
+  color: var(--muse-accent);
+}
+
+.muse-lib-pinned-clickable {
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.muse-lib-pinned-clickable:hover {
+  border-color: var(--muse-border);
+  background: var(--muse-highlight);
+}
+
+.muse-lib-pinned-open {
+  border-color: var(--muse-accent);
+}
+
+.muse-lib-pinned-item .slice-badge,
+.muse-lib-pinned-item .slice-cue {
+  flex: 0 0 auto;
 }
 
 .muse-lib-save-btn {
@@ -1563,144 +1768,108 @@ body {
   cursor: not-allowed;
 }
 
-/* Muse Library — source panel */
-.muse-lib-source {
-  width: 220px;
+/* Slice editor (inline under attached chat in Current Context) */
+.slice-badge {
+  font-size: 0.66rem;
+  background-color: var(--ctx-bg-raised);
+  color: var(--ctx-accent);
+  border: 1px solid var(--ctx-accent);
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: auto;
   flex-shrink: 0;
-  background-color: var(--bg-secondary);
-  border-left: 1px solid var(--border);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.slice-toggle-active {
+  color: var(--ctx-accent) !important;
+}
+
+.slice-editor {
+  margin: 4px 0 8px 22px;
+  padding: 8px;
+  background-color: var(--ctx-bg-raised);
+  border: 1px solid var(--ctx-border);
+  border-radius: 6px;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  transition: opacity 0.2s;
+  gap: 6px;
 }
 
-.muse-lib-source-dimmed {
-  opacity: 0.7;
-  pointer-events: none;
-}
-
-.muse-lib-source-header {
-  padding: 10px 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #fff;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.muse-lib-source-section {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.muse-lib-source-section:last-child {
-  border-bottom: none;
-}
-
-.muse-lib-source-label {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 12px 8px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: #fff;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-}
-
-.src-empty {
-  padding: 4px 12px;
-  font-size: 0.78rem;
-  color: var(--text-secondary);
-  font-style: italic;
-}
-
-/* Draggable items */
-.src-item {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 10px;
-  font-size: 0.82rem;
-  color: #fff;
-  cursor: grab;
-  border-radius: 5px;
-  margin: 2px 6px;
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  transition: background 0.12s, border-color 0.12s;
-  overflow: hidden;
-}
-
-.src-item span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.src-item svg {
-  flex-shrink: 0;
-  color: #fff;
-  opacity: 0.7;
-}
-
-.src-item:hover {
-  background: rgba(255, 255, 255, 0.13);
-  border-color: rgba(255, 255, 255, 0.18);
-}
-
-.src-item:active {
-  cursor: grabbing;
-}
-
-/* Folder nodes in source panel */
-.src-folder {
-  margin: 2px 0;
-}
-
-.src-folder-header {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 10px 5px 8px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: #fff;
-  cursor: pointer;
-  transition: background 0.12s;
-}
-
-.src-folder-header:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.src-folder-header svg {
-  flex-shrink: 0;
-  color: #fff;
-  opacity: 0.6;
-}
-
-.src-folder-header span {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.src-empty-hint {
+.slice-editor-hint {
   font-size: 0.7rem;
   color: var(--text-secondary);
   font-style: italic;
-  font-weight: 400;
-  flex-shrink: 0;
 }
 
-.src-folder-children {
-  /* children indented via inline style on parent */
+.slice-editor-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.slice-msg {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 6px;
+  font-size: 0.72rem;
+  border-radius: 4px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  background-color: transparent;
+  transition: background-color 80ms ease;
+}
+
+.slice-msg:hover {
+  background-color: rgba(127, 127, 127, 0.12);
+}
+
+.slice-msg-dimmed {
+  opacity: 0.35;
+}
+
+.slice-msg-start {
+  border-left-color: var(--ctx-accent);
+}
+
+.slice-msg-end {
+  border-left-color: var(--ctx-accent);
+}
+
+.slice-msg-role {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+  width: 32px;
+}
+
+.slice-msg-content {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slice-editor-clear {
+  align-self: flex-start;
+  background: none;
+  border: 1px solid var(--ctx-border);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.slice-editor-clear:hover {
+  color: var(--error);
+  border-color: var(--error);
 }

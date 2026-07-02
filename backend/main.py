@@ -13,6 +13,10 @@ _MIGRATIONS = [
     "ALTER TABLE uploaded_files ADD COLUMN file_folder_id VARCHAR REFERENCES file_folders(id)",
     "ALTER TABLE file_folders ADD COLUMN parent_id VARCHAR REFERENCES file_folders(id)",
     "ALTER TABLE chats ADD COLUMN muse_id VARCHAR REFERENCES muses(id)",
+    "ALTER TABLE context_attachments ADD COLUMN start_message_id VARCHAR",
+    "ALTER TABLE context_attachments ADD COLUMN end_message_id VARCHAR",
+    "ALTER TABLE muse_contexts ADD COLUMN start_message_id VARCHAR",
+    "ALTER TABLE muse_contexts ADD COLUMN end_message_id VARCHAR",
 ]
 with engine.connect() as _conn:
     for _sql in _MIGRATIONS:

@@ -1,9 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, User, Bot } from 'lucide-react';
+import { Send, Loader2, User, Bot, FolderTree, Paperclip, Wand2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import { useChatStore } from '../store/chatStore';
-import { MusePicker } from './MusePicker';
 
 const MD_PLUGINS = [rehypeHighlight];
 
@@ -64,7 +63,24 @@ export function ChatArea() {
           <div className="chat-empty-content">
             <h2>Welcome to FiLM</h2>
             <p>File-based LLM Management</p>
-            <p className="chat-empty-hint">Create a new chat or select one to get started.</p>
+            <div className="welcome-cards">
+              <div className="welcome-card">
+                <FolderTree size={18} />
+                <strong>Library</strong>
+                <span>Organize chats into folders in the left sidebar — drag to move them.</span>
+              </div>
+              <div className="welcome-card">
+                <Paperclip size={18} />
+                <strong>Context</strong>
+                <span>Attach chats and files in the right panel so the AI knows your background.</span>
+              </div>
+              <div className="welcome-card">
+                <Wand2 size={18} />
+                <strong>Muses</strong>
+                <span>Reusable AI personalities with their own pinned context — assign one per chat.</span>
+              </div>
+            </div>
+            <p className="chat-empty-hint">Type a message below to start a new chat, or pick one from the Library.</p>
           </div>
         </div>
         {inputBox('Type a message to start a new chat...')}
@@ -76,7 +92,6 @@ export function ChatArea() {
     <div className="chat-area">
       <div className="chat-header">
         <h2>{currentChat.title}</h2>
-        <MusePicker />
       </div>
 
       <div className="chat-messages">

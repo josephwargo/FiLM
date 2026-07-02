@@ -6,7 +6,7 @@ from ..models.database import get_db
 from ..models.schemas import Muse, MuseContext, Chat
 from ..models.pydantic_models import (
     MuseCreate, MuseUpdate, MuseResponse,
-    MuseContextCreate, MuseContextResponse,
+    MuseContextCreate, MuseContextUpdate, MuseContextResponse,
 )
 
 router = APIRouter(prefix="/api/muses", tags=["muses"])
@@ -83,9 +83,37 @@ def pin_context(muse_id: str, data: MuseContextCreate, db: Session = Depends(get
         MuseContext.source_id == data.source_id,
     ).first()
     if existing:
+        existing.start_message_id = data.start_message_id
+        existing.end_message_id = data.end_message_id
+        db.commit()
+        db.refresh(existing)
         return existing
-    ctx = MuseContext(muse_id=muse_id, source_type=data.source_type, source_id=data.source_id)
+    ctx = MuseContext(
+        muse_id=muse_id,
+        source_type=data.source_type,
+        source_id=data.source_id,
+        start_message_id=data.start_message_id,
+        end_message_id=data.end_message_id,
+    )
     db.add(ctx)
+    db.commit()
+    db.refresh(ctx)
+    return ctx
+
+
+@router.patch("/{muse_id}/context/{context_id}", response_model=MuseContextResponse)
+def update_pinned_context(muse_id: str, context_id: str, data: MuseContextUpdate, db: Session = Depends(get_db)):
+    ctx = db.query(MuseContext).filter(
+        MuseContext.id == context_id,
+        MuseContext.muse_id == muse_id,
+    ).first()
+    if not ctx:
+        raise HTTPException(status_code=404, detail="Pinned context not found")
+    updates = data.model_dump(exclude_unset=True)
+    if "start_message_id" in updates:
+        ctx.start_message_id = updates["start_message_id"]
+    if "end_message_id" in updates:
+        ctx.end_message_id = updates["end_message_id"]
     db.commit()
     db.refresh(ctx)
     return ctx

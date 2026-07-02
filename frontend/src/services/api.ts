@@ -123,6 +123,15 @@ export const contextAPI = {
   detach: (attachmentId: string) =>
     fetchAPI<any>(`/context/detach/${attachmentId}`, { method: 'DELETE' }),
 
+  updateAttachment: (
+    attachmentId: string,
+    data: { start_message_id?: string | null; end_message_id?: string | null }
+  ) =>
+    fetchAPI<any>(`/context/attachments/${attachmentId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
   listFiles: () =>
     fetchAPI<any[]>('/context/files'),
 
@@ -192,9 +201,27 @@ export const musesAPI = {
   getContext: (museId: string) =>
     fetchAPI<any[]>(`/muses/${museId}/context`),
 
-  pinContext: (museId: string, data: { source_type: 'chat' | 'file'; source_id: string }) =>
+  pinContext: (
+    museId: string,
+    data: {
+      source_type: 'chat' | 'file';
+      source_id: string;
+      start_message_id?: string | null;
+      end_message_id?: string | null;
+    }
+  ) =>
     fetchAPI<any>(`/muses/${museId}/context`, {
       method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateContext: (
+    museId: string,
+    contextId: string,
+    data: { start_message_id?: string | null; end_message_id?: string | null }
+  ) =>
+    fetchAPI<any>(`/muses/${museId}/context/${contextId}`, {
+      method: 'PATCH',
       body: JSON.stringify(data),
     }),
 

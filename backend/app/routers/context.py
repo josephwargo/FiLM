@@ -9,7 +9,9 @@ from pypdf import PdfReader
 
 from ..models.database import get_db
 from ..models.schemas import ContextAttachment, UploadedFile, FileFolder, Chat, SourceType
-from ..models.pydantic_models import ContextAttachmentCreate, ContextAttachmentResponse, FileFolderCreate
+from ..models.pydantic_models import (
+    ContextAttachmentCreate, ContextAttachmentResponse, ContextAttachmentUpdate, FileFolderCreate,
+)
 from ..services.chroma_service import chroma_service
 from pathlib import Path
 
@@ -294,6 +296,30 @@ def detach_context(attachment_id: str, db: Session = Depends(get_db)):
     db.delete(attachment)
     db.commit()
     return {"status": "detached"}
+
+
+@router.patch("/attachments/{attachment_id}", response_model=ContextAttachmentResponse)
+def update_attachment(
+    attachment_id: str,
+    data: ContextAttachmentUpdate,
+    db: Session = Depends(get_db),
+):
+    """Update slice bounds on an existing attachment. Pass null to clear a bound."""
+    attachment = db.query(ContextAttachment).filter(
+        ContextAttachment.id == attachment_id
+    ).first()
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    update_data = data.model_dump(exclude_unset=True)
+    if "start_message_id" in update_data:
+        attachment.start_message_id = update_data["start_message_id"]
+    if "end_message_id" in update_data:
+        attachment.end_message_id = update_data["end_message_id"]
+
+    db.commit()
+    db.refresh(attachment)
+    return attachment
 
 
 # --- Chat context route (must be last due to {chat_id} parameter) ---

@@ -1,17 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   FileText, MessageSquare, X, Upload, ChevronLeft, ChevronRight,
-  ChevronDown, Inbox, Trash2, Folder, FolderPlus,
+  ChevronDown, Inbox, Trash2, Folder, FolderPlus, Scissors, Wand2,
 } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
-import { contextAPI } from '../services/api';
-import type { ContextAttachment, UploadedFile, FileFolder } from '../types';
+import { contextAPI, chatsAPI, musesAPI } from '../services/api';
+import { MusePicker } from './MusePicker';
+import { SliceEditor } from './SliceEditor';
+import type { ContextAttachment, UploadedFile, FileFolder, Message, MuseContext } from '../types';
 
 const MIN_WIDTH = 180;
 const MAX_WIDTH = 520;
 
 export function ContextPanel() {
-  const { currentChat, chats, folderTree } = useChatStore();
+  const { currentChat, chats, folderTree, muses, openMuseLibrary, view } = useChatStore();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [width, setWidth] = useState(260);
   const savedWidth = useRef(260);
@@ -33,6 +35,14 @@ export function ContextPanel() {
   const [isDragOverContext, setIsDragOverContext] = useState(false);
   const [dragOverFileFolderId, setDragOverFileFolderId] = useState<string | null>(null);
   const [draggedFileFolderId, setDraggedFileFolderId] = useState<string | null>(null);
+
+  // Slice editor state — which attachment's editor is open, and a per-source-chat message cache
+  const [openSliceFor, setOpenSliceFor] = useState<string | null>(null);
+  const [sliceMessages, setSliceMessages] = useState<Record<string, Message[]>>({});
+  const [sliceLoadingFor, setSliceLoadingFor] = useState<string | null>(null);
+
+  // Pinned context of the current chat's Muse (read-only display)
+  const [museCtx, setMuseCtx] = useState<MuseContext[]>([]);
 
   const collapse = () => { savedWidth.current = width; setIsCollapsed(true); };
   const expand = () => { setWidth(savedWidth.current); setIsCollapsed(false); };
@@ -62,6 +72,16 @@ export function ContextPanel() {
     if (currentChat) loadAttachments();
     else setAttachments([]);
   }, [currentChat?.id]);
+
+  const activeMuse = muses.find((m) => m.id === currentChat?.muse_id) ?? null;
+  useEffect(() => {
+    if (!activeMuse) { setMuseCtx([]); return; }
+    let cancelled = false;
+    musesAPI.getContext(activeMuse.id)
+      .then((ctx) => { if (!cancelled) setMuseCtx(ctx); })
+      .catch(() => { if (!cancelled) setMuseCtx([]); });
+    return () => { cancelled = true; };
+  }, [activeMuse?.id]);
 
   const loadAttachments = async () => {
     if (!currentChat) return;
@@ -105,8 +125,47 @@ export function ContextPanel() {
   };
 
   const detach = async (attachmentId: string) => {
-    try { await contextAPI.detach(attachmentId); await loadAttachments(); }
-    catch (e) { console.error(e); }
+    try {
+      await contextAPI.detach(attachmentId);
+      if (openSliceFor === attachmentId) setOpenSliceFor(null);
+      await loadAttachments();
+    } catch (e) { console.error(e); }
+  };
+
+  // --- Slice editor ---
+
+  const toggleSliceEditor = async (att: ContextAttachment) => {
+    if (openSliceFor === att.id) {
+      setOpenSliceFor(null);
+      return;
+    }
+    setOpenSliceFor(att.id);
+    if (!sliceMessages[att.source_id]) {
+      setSliceLoadingFor(att.id);
+      try {
+        const chat = await chatsAPI.get(att.source_id);
+        setSliceMessages((prev) => ({ ...prev, [att.source_id]: chat.messages ?? [] }));
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setSliceLoadingFor(null);
+      }
+    }
+  };
+
+  const updateSlice = async (
+    att: ContextAttachment,
+    patch: { start_message_id?: string | null; end_message_id?: string | null },
+  ) => {
+    setAttachments((prev) =>
+      prev.map((a) => (a.id === att.id ? { ...a, ...patch } : a))
+    );
+    try {
+      await contextAPI.updateAttachment(att.id, patch);
+    } catch (e) {
+      console.error(e);
+      await loadAttachments();
+    }
   };
 
   // --- File folder management ---
@@ -169,6 +228,23 @@ export function ContextPanel() {
     return files.find((f) => f.id === att.source_id)?.filename
       ?? fileFolders.flatMap((ff) => ff.files).find((f) => f.id === att.source_id)?.filename
       ?? 'Unknown file';
+  };
+
+  const getMuseCtxName = (ctx: MuseContext): string => {
+    if (ctx.source_type === 'chat') return chats.find((c) => c.id === ctx.source_id)?.title ?? 'Unknown chat';
+    return files.find((f) => f.id === ctx.source_id)?.filename
+      ?? fileFolders.flatMap((ff) => ff.files).find((f) => f.id === ctx.source_id)?.filename
+      ?? 'Unknown file';
+  };
+
+  const sliceBadgeText = (att: ContextAttachment): string => {
+    const msgs = sliceMessages[att.source_id];
+    if (!msgs || msgs.length === 0) return 'Sliced';
+    const rawStart = att.start_message_id ? msgs.findIndex((m) => m.id === att.start_message_id) : 0;
+    const rawEnd = att.end_message_id ? msgs.findIndex((m) => m.id === att.end_message_id) : msgs.length - 1;
+    const startIdx = rawStart === -1 ? 0 : rawStart;
+    const endIdx = rawEnd === -1 ? msgs.length - 1 : rawEnd;
+    return `Sliced · ${Math.max(0, endIdx - startIdx + 1)} of ${msgs.length}`;
   };
 
   const fileFolderUnattached = (folder: FileFolder): number => {
@@ -336,7 +412,8 @@ export function ContextPanel() {
         </button>
       </div>
 
-      {/* Current Context Drop Zone */}
+      {/* Current Context Drop Zone — hidden in the Muse editor, where staged pinned context takes its place */}
+      {view !== 'muse-library' && (
       <div
         className={`current-context-zone ${isDragOverContext ? 'drag-over' : ''} ${!currentChat ? 'disabled' : ''}`}
         onDragOver={currentChat ? (e) => { e.preventDefault(); setIsDragOverContext(true); } : undefined}
@@ -346,25 +423,87 @@ export function ContextPanel() {
         <div className="current-context-header">
           <Inbox size={16} />
           <span>Current Context</span>
+          <span className="current-context-live-badge">Active now</span>
         </div>
+        <div className="current-context-subtitle">Sent to the AI with every message in this chat</div>
+
+        {currentChat && (
+          <div className="muse-context-group">
+            <MusePicker />
+            {activeMuse && museCtx.length > 0 && (
+              <>
+                {museCtx.map((ctx) => (
+                  <div key={ctx.id} className="muse-context-item" title="Pinned by the Muse — included automatically">
+                    {ctx.source_type === 'chat' ? <MessageSquare size={12} /> : <FileText size={12} />}
+                    <span>{getMuseCtxName(ctx)}</span>
+                  </div>
+                ))}
+                <button className="muse-context-edit-link" onClick={() => openMuseLibrary(activeMuse.id)}>
+                  Edit in Muse Library
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
         {!currentChat ? (
           <div className="current-context-empty">Select a chat first</div>
         ) : attachments.length === 0 ? (
-          <div className="current-context-empty">Drag items here</div>
+          <div className="current-context-empty">
+            Drag chats or files here — their content is included when the AI answers.
+          </div>
         ) : (
           <div className="current-context-items">
-            {attachments.map((att) => (
-              <div key={att.id} className="current-context-item">
-                {att.source_type === 'chat' ? <MessageSquare size={14} /> : <FileText size={14} />}
-                <span>{getAttachedSourceName(att)}</span>
-                <button className="context-item-remove" onClick={() => detach(att.id)}>
-                  <X size={14} />
-                </button>
-              </div>
-            ))}
+            {attachments.map((att) => {
+              const isChat = att.source_type === 'chat';
+              const isSliced = isChat && (att.start_message_id || att.end_message_id);
+              const isOpen = openSliceFor === att.id;
+              return (
+                <div key={att.id}>
+                  <div
+                    className={`current-context-item ${isChat ? 'current-context-item-clickable' : ''} ${isOpen ? 'current-context-item-open' : ''}`}
+                    onClick={isChat ? () => toggleSliceEditor(att) : undefined}
+                    title={isChat ? (isOpen ? 'Close slice editor' : 'Click to slice — send only part of this chat') : undefined}
+                  >
+                    {isChat ? <MessageSquare size={14} /> : <FileText size={14} />}
+                    <span>{getAttachedSourceName(att)}</span>
+                    {isSliced && <span className="slice-badge">{sliceBadgeText(att)}</span>}
+                    {isChat && (
+                      <span className={`slice-cue ${isOpen ? 'slice-toggle-active' : ''}`}>
+                        <Scissors size={13} />
+                      </span>
+                    )}
+                    <button
+                      className="context-item-remove"
+                      onClick={(e) => { e.stopPropagation(); detach(att.id); }}
+                      title="Remove"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                  {isOpen && (
+                    <SliceEditor
+                      startId={att.start_message_id}
+                      endId={att.end_message_id}
+                      messages={sliceMessages[att.source_id]}
+                      loading={sliceLoadingFor === att.id}
+                      onUpdate={(patch) => updateSlice(att, patch)}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
+      )}
+
+      {/* Controls below — these change settings, unlike the status card above */}
+      <div className="context-tools-divider">
+        <span>Add &amp; Configure</span>
+      </div>
+
+      <MusePicker />
 
       {/* File Folders */}
       <div className="context-section">

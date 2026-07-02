@@ -39,6 +39,8 @@ export interface MuseContext {
   muse_id: string;
   source_type: 'chat' | 'file';
   source_id: string;
+  start_message_id: string | null;
+  end_message_id: string | null;
   created_at: string;
 }
 
@@ -63,6 +65,8 @@ export interface ContextAttachment {
   chat_id: string;
   source_type: 'chat' | 'file';
   source_id: string;
+  start_message_id: string | null;
+  end_message_id: string | null;
   created_at: string;
 }
 

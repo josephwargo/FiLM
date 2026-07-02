@@ -917,3 +917,118 @@ The following is the complete conversation across all build sessions.
 **User:** Can you update the chat transcript part of the build log too, and remember to keep that updated with each change?
 
 **Assistant:** Updated this transcript section (you're reading it). Will append to it at the end of every future session.
+
+---
+
+### Session 7 — Launcher Scripts, Muses PRD Audit, Chat Slicing
+
+**Date:** 2026-06-28
+
+**User:** Asked for three bash scripts — one to launch the frontend, one for the backend, and one for both, each in a new terminal.
+
+**Assistant:** Created `start-frontend.sh`, `start-backend.sh`, `start.sh` at the project root. Use `cygpath -w` / `pwd -W` to convert Git Bash's Unix-style path to Windows form before handing it to PowerShell, then `Start-Process powershell -WorkingDirectory ...` so the new window's CWD is anchored before any command runs (more reliable than `Set-Location` inside the command string). Backend script calls `.\venv\Scripts\uvicorn.exe` directly to sidestep `Activate.ps1` execution-policy issues. Two earlier iterations failed: the first because the Unix path made `Set-Location` silently fail, the second because the activation script blocked under PowerShell's default execution policy.
+
+---
+
+**User:** "can you please update the muses PRD to be up-to-date with all that has been implemented?"
+
+**Assistant:** Audited the actual implementation against the PRD: confirmed the `MuseContext` model, cascade-delete relationship, three pinned-context endpoints, idempotent pinning, recursive `_resolve_context` / `_build_context_parts` with `MAX_CONTEXT_DEPTH = 3`, topbar nav button, three-column Muse Library, and folder/file-folder bulk-pinning. Rewrote `docs/products/muses_PRD.md`: flipped status to "Complete (2026-06-28)", moved all the "New" items to checked, replaced the original card-grid mockup with the actual three-column layout, converted the Open Questions section into Resolved Design Questions, and added a Notable Deltas section calling out idempotent pinning, the integrated source panel, and cascade delete as intentional improvements over the original spec.
+
+---
+
+**User:** "can you implement chat slicing per @docs/products/chat_slicing_PRD.md?"
+
+**Assistant:** Implemented the full feature.
+
+Backend:
+- Added `start_message_id` / `end_message_id` columns to `ContextAttachment` (no FK — slicing falls back silently if a referenced message is deleted, consistent with the PRD's resolution).
+- Inline `ALTER TABLE` migration in `main.py`.
+- New `ContextAttachmentUpdate` Pydantic model; slice fields surfaced on `ContextAttachmentResponse`.
+- `PATCH /api/context/attachments/:id` endpoint using `model_dump(exclude_unset=True)` so omitting a field leaves it untouched and passing `null` clears the bound.
+- Rewrote `_build_context_parts` to take `(source_type, source_id, start_id, end_id)` refs and slice the source chat's messages when either bound is set. The transcript header gets a "(sliced)" suffix when bounds are active. Muse pinned context passes `None, None` for both bounds (slicing is per-attachment only).
+- Backend tests: CTX-020 (PATCH updates bounds, partial clear), CTX-021 (end-to-end: sliced range excludes outside-range messages), CTX-022 (end-only includes from beginning), CTX-023 (unknown message IDs fall back to full chat). Suite now 61/61 passing.
+
+Frontend:
+- Added `start_message_id` / `end_message_id` to `ContextAttachment` type.
+- Added `contextAPI.updateAttachment`.
+- `ContextPanel.tsx`: scissors icon next to each attached chat toggles an inline slice editor. The editor lazily fetches the source chat's messages, caches them keyed by source chat id, and renders one row per message (role + first 60 chars). Click = set end, Shift-click = set start, outside-range messages dimmed via `slice-msg-dimmed`. Optimistic update + background PATCH; revert by reloading on failure. Sliced state shows a small "Sliced" badge on the attachment row, and a Clear-slice button inside the editor wipes both bounds.
+
+Notable deltas from the original spec: simplified the badge to just "Sliced" (without `↑12` / `3–12` index labels) — the indices would require either preloading every source chat for the badge or maintaining a stale index, neither of which felt worth it for an at-a-glance indicator. The slice editor itself does show the message timeline with the in-range messages highlighted, so positional context is right there when the user opens the editor.
+
+---
+
+**User:** Moved the launcher scripts into `launch/` — they broke ("Start-Process ... WorkingDirectory ... not valid"). Also: "I am no longer getting responses from the AI models... can you fix?"
+
+**Assistant:** Two fixes. (1) The scripts assumed they sat at the project root; updated all three to resolve the root as the parent of the script's own directory (`$(dirname "${BASH_SOURCE[0]}")/..`). (2) Invoking `gemini_service` directly with the venv Python revealed `404 NOT_FOUND: models/gemini-2.0-flash is no longer available` — Google retired the model. Switched `gemini_service.py` to `gemini-2.5-flash` and verified with a live call. README/docs references updated from 2.0 to 2.5.
+
+---
+
+### Session 8 — UX Flow Redesign
+
+**Date:** 2026-07-02
+
+**User:** "I really really like the current app and functionality. But the user flow just feels a bit... clunky. Like you can edit things in context and in the muses, and I imagine it is a bit confusing to a new user the difference. And it's hard to find out where the slicing is. etc. ... Could you please do your absolute best to maintain current functionality but make it flow better for users?"
+
+**Assistant:** Frontend-only redesign — no backend or API changes, all 61 backend tests untouched. Two user decisions confirmed up front: consolidate all Muse editing into the Library, and make attached-chat rows click-to-expand the slice editor.
+
+1. **Navigation moved into the store** (`chatStore.ts`): `view: 'chat' | 'muse-library'` plus `museLibraryTarget: string | 'new' | null`, with `openMuseLibrary(target?)` / `closeMuseLibrary()` actions, so any component can deep-link into the Muse Library. `App.tsx` now reads `view` from the store.
+
+2. **MusePicker → pure picker** (`MusePicker.tsx`): removed the cramped inline create/edit/delete form entirely. The dropdown now only selects a Muse; a new footer offers "+ New Muse" (opens the Library in creation mode) and "Manage Muses"; each muse row's pencil deep-links to that muse in the Library. One editing surface instead of two.
+
+3. **Muse Library is a proper page** (`MuseLibrary.tsx`): new top bar with "← Back to Chats" and a one-line hint; honors `museLibraryTarget` on arrival (creation mode or preselected muse, applied once per visit via a ref guard); explainer under Pinned Context clarifying muse context ("every chat that uses this Muse") vs the per-chat Context panel; delete now asks for confirmation like every other delete in the app.
+
+4. **Context panel clarity** (`ContextPanel.tsx`): "Current Context" gains the subtitle "Sent to the AI with every message in this chat". When the current chat's Muse has pinned context, a read-only violet "From Muse ‹name›" group renders above the attachments (fetched via `musesAPI.getContext`) with an "Edit in Muse Library" deep link — the chat's *effective* context is finally visible in one place. Attached-chat rows are now click-to-expand slice editors with an always-visible scissors cue and hover state; the badge upgraded from "Sliced" to "Sliced · k of n" once the editor has loaded the source messages. Empty-state copy now explains what attaching does.
+
+5. **Welcome screen** (`ChatArea.tsx`): the no-chat state shows three concept cards — Library (red), Context (indigo), Muses (violet) — matching each feature's accent color.
+
+6. **Styles** (`App.css`): new `--muse-accent` violet tokens to visually separate "muse stuff" from indigo per-chat context; styles for the picker footer, Library top bar, explainer, From-Muse group, clickable rows, welcome cards; removed the dead `.muse-form*` / `.muse-input*` / `.muse-submit-btn*` styles from the old dropdown form.
+
+Verified with `tsc --noEmit` and a production `vite build` (both clean). Browser walkthrough pending user's next run of the app.
+
+---
+
+**User:** "Make the Muse page more visible to access from the get-go. Maybe move it to the top of the RHS Context area. Allow for file upload in the muse editor page."
+
+**Assistant:** (1) Added a violet "Muse Library" banner button at the top of the Context panel (below the header, above Current Context) — shows "Muse: ‹name›" when the current chat has one, and deep-links into the Library on that muse. Topbar "Muses" button kept as a secondary entry point. (2) Added an "Upload File" button to the Files section of the Muse Library's source panel — same `contextAPI.uploadFile` flow as the Context panel; the list refreshes after upload so the new file can be dragged onto the pinned-context drop zone.
+
+---
+
+### Session 9 — Persistent Layout, Muse Picker in Context Panel, Muse Slicing, Staged Saves
+
+**Date:** 2026-07-02
+
+**User:** "Remove the redundant 'Muses' in the top right, and have the Muse picker ALWAYS be in the right hand column. Make it so that the chat selector is always on the LHS, and does not change when you're in the muse editor. Allow for chat slicing while in the muse editor. Make it so that you have to 'save changes' when uploading context (file or chat) to the muse. Allow user to click-and-drag to set size of LHS and RHS columns on all screens, and have the size be consistent when navigating between UIs."
+
+**Assistant:** Full-stack change — persistent app chrome, muse-context slicing on the backend, and a staged-save Muse editor.
+
+Key design consequence: making the Sidebar (LHS) and Context panel (RHS) persistent across views made the Muse Library's duplicate right-hand drag-source panel redundant — users now drag chats/folders from the real sidebar and files from the real Context panel. That panel and its `DraggableChat` / `DraggableFile` / `FolderNode` components were removed (the Library's own upload button went with it, but the Context panel's Upload button is now visible while editing a Muse, so upload-from-the-editor is preserved). Column resize consistency came for free: both panels already supported drag-resize, and since they never unmount, their width/collapsed state persists across navigation.
+
+Backend (muse context slicing — mirrors attachment slicing):
+- `MuseContext` gained nullable `start_message_id` / `end_message_id` columns + two inline migrations in `main.py`.
+- `MuseContextCreate` / `MuseContextResponse` carry the bounds; new `MuseContextUpdate` model.
+- `pin_context` stores bounds (and updates them on an idempotent re-pin); new `PATCH /api/muses/:id/context/:ctx_id` using `model_dump(exclude_unset=True)`.
+- `chats.py` now passes the real bounds for muse refs instead of `(None, None)` — `_build_context_parts` already handled slicing for any ref.
+- Tests MUSE-019 (pin with bounds, PATCH partial update, clear with nulls) and MUSE-020 (end-to-end: sliced muse-pinned chat excludes out-of-range messages, "(sliced)" header). Suite now 63/63 passing.
+
+Frontend:
+- `App.tsx`: topbar "Muses" button deleted; body always renders `Sidebar` + middle column (`ChatArea` or `MuseLibrary`) + `ContextPanel`.
+- `chatStore.ts`: `selectChat` also sets `view: 'chat'` — clicking any chat in the always-visible sidebar exits the Muse editor.
+- `MusePicker.tsx`: rebuilt as a full-width panel variant living at the top of the Context panel (above the Muse Library banner). Violet when a Muse is active, disabled "Select a chat to assign a Muse" state, and an inline expanding dropdown (position static — an absolute overlay would clip inside the scrollable panel). Removed from the chat header.
+- New `SliceEditor.tsx`: extracted from ContextPanel with generalized props `{ startId, endId, messages, loading, onUpdate }`; both ContextPanel and MuseLibrary use it.
+- `MuseLibrary.tsx`: source panel removed; now just muse list + editor as the middle column. Pinned context is **staged**: drops/unpins/slice-edits mutate a local `StagedCtx[]` diffed against a server baseline; "Save Changes" persists everything (create/update muse → DELETE removed → POST added with bounds → PATCH changed bounds → reload). Pinning is allowed while creating a new Muse (no more "save the Muse first"). An "Unsaved changes" note appears next to the save button, and switching muses (or starting a new one) with unsaved changes asks for confirmation. Pinned chat rows are click-to-expand slice editors with scissors cue and "Sliced · k of n" badge — same interaction as the Context panel, but edits stay local until save.
+- `api.ts`: `musesAPI.pinContext` accepts optional bounds; new `musesAPI.updateContext`. `types`: `MuseContext` gained the bound fields.
+- `App.css`: deleted dead `.topbar-nav-btn*`, `.muse-lib-source*`, `.src-*` styles; added the panel-variant picker, inline dropdown, unsaved-note, and clickable pinned-row styles.
+
+Verified: 63/63 pytest, `tsc --noEmit` clean, production `vite build` clean. Browser walkthrough pending user's next run (backend restart required for the new migrations).
+
+---
+
+**User:** "When in the muse editor, remove the 'current context' box from the RHS as it is confusing. Remove the duplicate 'muse' blocks on the RHS — you can just remove the lower one as you can get to the muse editor in the upper one."
+
+**Assistant:** (1) The Current Context zone in `ContextPanel.tsx` is now hidden while `view === 'muse-library'` — in the editor, the staged pinned-context drop zone is the only context surface. (2) Removed the violet "Muse Library" banner (and its CSS) — the panel-variant MusePicker is now the single muse block on the RHS; the Library is reached via its "New Muse" / "Manage Muses" footer shortcuts, per-muse pencil icons, or the "Edit in Muse Library" link in the From-Muse group. README wording updated. `tsc` + `vite build` clean.
+
+---
+
+**User:** "Can you make the 'current context' above the 'muse selector', and make it super visually apparent that it is DIFFERENT (describes current state) than the Muse Selector and file uploads."
+
+**Assistant:** Reordered the Context panel: Current Context now sits directly under the panel header, above everything else. Restyled it as a **status card** — solid indigo fill (up from 4% to 10% tint), 1px solid border with a 3px indigo left accent bar (dropping the dashed "drop-zone" border, which read as a control), and a pill-shaped "ACTIVE NOW" badge in its header. Between it and the controls sits a new labeled rule — "ADD & CONFIGURE" — followed by the Muse picker, File Folders, and Unfiled Files, so the panel reads as: *state on top, tools below*. New CSS: `.current-context-live-badge`, `.context-tools-divider`. `tsc` + `vite build` clean.

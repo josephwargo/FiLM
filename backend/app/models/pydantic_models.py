@@ -107,7 +107,14 @@ class ContextAttachmentResponse(BaseModel):
     chat_id: str
     source_type: SourceType
     source_id: str
+    start_message_id: Optional[str] = None
+    end_message_id: Optional[str] = None
     created_at: datetime
+
+
+class ContextAttachmentUpdate(BaseModel):
+    start_message_id: Optional[str] = None
+    end_message_id: Optional[str] = None
 
 
 # File folder schemas
@@ -141,6 +148,13 @@ class MuseUpdate(BaseModel):
 class MuseContextCreate(BaseModel):
     source_type: SourceType
     source_id: str
+    start_message_id: Optional[str] = None
+    end_message_id: Optional[str] = None
+
+
+class MuseContextUpdate(BaseModel):
+    start_message_id: Optional[str] = None
+    end_message_id: Optional[str] = None
 
 
 class MuseContextResponse(BaseModel):
@@ -150,6 +164,8 @@ class MuseContextResponse(BaseModel):
     muse_id: str
     source_type: SourceType
     source_id: str
+    start_message_id: Optional[str] = None
+    end_message_id: Optional[str] = None
     created_at: datetime
 
 
