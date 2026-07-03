@@ -9,8 +9,13 @@ from dotenv import load_dotenv
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 load_dotenv(BACKEND_DIR / ".env")
 
-# Use absolute path for SQLite database
-DEFAULT_DB_PATH = BACKEND_DIR / "film.db"
+# All persistent data (film.db, chroma_data/, uploads/) lives under DATA_DIR.
+# Defaults to the backend dir for local dev; set FILM_DATA_DIR to a mounted
+# volume (e.g. /data) in hosted deployments.
+DATA_DIR = Path(os.getenv("FILM_DATA_DIR", str(BACKEND_DIR)))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+DEFAULT_DB_PATH = DATA_DIR / "film.db"
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DEFAULT_DB_PATH}")
 
 engine = create_engine(

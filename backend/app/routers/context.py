@@ -7,7 +7,7 @@ import io
 
 from pypdf import PdfReader
 
-from ..models.database import get_db
+from ..models.database import get_db, DATA_DIR
 from ..models.schemas import ContextAttachment, UploadedFile, FileFolder, Chat, SourceType
 from ..models.pydantic_models import (
     ContextAttachmentCreate, ContextAttachmentResponse, ContextAttachmentUpdate, FileFolderCreate,
@@ -17,9 +17,7 @@ from pathlib import Path
 
 router = APIRouter(prefix="/api/context", tags=["context"])
 
-# Use absolute path for uploads directory
-BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
-UPLOAD_DIR = BACKEND_DIR / "uploads"
+UPLOAD_DIR = DATA_DIR / "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 

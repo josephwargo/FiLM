@@ -8,8 +8,9 @@ from dotenv import load_dotenv
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 load_dotenv(BACKEND_DIR / ".env")
 
-# Use absolute path for ChromaDB
-DEFAULT_CHROMA_DIR = str(BACKEND_DIR / "chroma_data")
+from ..models.database import DATA_DIR
+
+DEFAULT_CHROMA_DIR = str(DATA_DIR / "chroma_data")
 CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", DEFAULT_CHROMA_DIR)
 
 

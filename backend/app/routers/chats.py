@@ -12,10 +12,6 @@ from ..models.pydantic_models import (
 )
 from ..services.llm import get_llm_service, get_model_provider, resolve_model_id
 from ..services.chroma_service import chroma_service
-from pathlib import Path
-
-BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
-UPLOAD_DIR = BACKEND_DIR / "uploads"
 
 router = APIRouter(prefix="/api/chats", tags=["chats"])
 

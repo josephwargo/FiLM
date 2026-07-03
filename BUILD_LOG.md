@@ -1087,3 +1087,17 @@ Frontend:
 - Store: `view` gains `'model-manager'`, `openModelManager()` / `closeModelManager()`; toggles and key saves refresh both the catalog and the picker's model list.
 
 Verified: 76/76 pytest, `tsc --noEmit` clean, production `vite build` clean.
+
+---
+
+**User:** Tried deploying to Vercel straight from the GitHub repo (failed); after discussing, chose single-host deployment: "that sounds great, please do that, and recommend which specific host to use."
+
+**Assistant:** Made the repo one-click deployable to any Docker host (recommended **Railway** — GitHub-native deploys, persistent volumes, ~$5/mo). Vercel was a dead end: it only runs static sites + serverless functions, and FiLM's backend needs a persistent process and disk (SQLite, ChromaDB, uploads).
+
+- **`Dockerfile`** (repo root, multi-stage): node:22-alpine builds the frontend → python:3.12-slim installs backend deps, copies `backend/` plus the built frontend into `./static`; `CMD uvicorn --port ${PORT:-8000}` respects host-injected ports. Plus `.dockerignore` (excludes venv, local data, node_modules, docs).
+- **`FILM_DATA_DIR` env var** (backend): all persistent data — `film.db`, `chroma_data/`, `uploads/` — now roots under one directory (`DATA_DIR` in `database.py`; chroma_service and context.py derive from it). Defaults to `backend/` locally, `/data` in the image → a single volume mount. `DATABASE_URL`/`CHROMA_PERSIST_DIR` overrides still win. Dead `UPLOAD_DIR` in chats.py deleted.
+- **Static serving**: `main.py` mounts `backend/static/` at `/` (SPA) when the directory exists; otherwise keeps the old JSON root — API routes and `/health` take precedence either way.
+- **Frontend**: `API_BASE` is now relative (`/api`) — same-origin in production; `vite.config.ts` proxies `/api → localhost:8000` in dev, so dev workflow is unchanged.
+- **README**: new "Deployment (single host)" section — Railway walkthrough (volume at `/data`, optional env keys, generate domain), a prominent **no-authentication warning** (anyone with the URL can read chats and spend your API keys), cold-start note (Chroma downloads its embedding model on first message), Ollama-is-local-only note, and why Vercel can't host this.
+
+Verified: 76/76 pytest, `tsc` + `vite build` clean, and a deployed-shape smoke test (dist copied to `backend/static`, uvicorn on :8123 → `/` serves index.html, `/api/models` serves JSON). `backend/static/` gitignored.

@@ -1,4 +1,6 @@
-const API_BASE = 'http://localhost:8000/api';
+// Same-origin in production (FastAPI serves the built frontend); proxied to
+// localhost:8000 by Vite in dev — see vite.config.ts
+const API_BASE = '/api';
 
 async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${endpoint}`, {

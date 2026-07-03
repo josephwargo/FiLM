@@ -151,6 +151,31 @@ RAG = Retrieval-Augmented Generation. Before sending your question to the AI, ad
 
 ---
 
+## Deployment (single host)
+
+FiLM ships as one Docker image: the `Dockerfile` builds the frontend, then FastAPI serves both the static app and the API from a single port — no CORS, no separate frontend host. All persistent data (SQLite, ChromaDB, uploads) lives under `FILM_DATA_DIR` (defaults to `/data` in the image), so the host needs a **persistent volume** — on an ephemeral filesystem your chats would be wiped every restart.
+
+> **Warning — no authentication.** FiLM has no login. Anyone with the URL can read every chat, upload files, and burn through your API keys. Only deploy somewhere private, keep the URL to yourself, or put an auth proxy in front of it.
+
+### Railway (recommended)
+
+1. Push the repo to GitHub
+2. [railway.com](https://railway.com) → **New Project** → **Deploy from GitHub repo** → pick your fork (the Dockerfile is detected automatically)
+3. On the service: **Settings → Volumes → Add Volume**, mount path `/data`
+4. Optional — **Variables**: add `GEMINI_API_KEY` (or skip it and paste keys into the in-app Model Manager instead; they're stored in SQLite on the volume)
+5. **Settings → Networking → Generate Domain** — that's your app URL
+
+Notes:
+- The first message after a fresh deploy is slow — ChromaDB downloads its embedding model once (it's cached on the volume thereafter)
+- Ollama models won't work from a cloud host — Ollama runs on *your* machine at `localhost`. Local models are a local-run feature.
+- Any Docker host with a volume works the same way (Fly.io, Render paid tier, a VPS): run the image, mount storage at `/data`, expose the port (`$PORT` respected, default 8000)
+
+### Why not Vercel?
+
+Vercel only hosts static sites and short-lived serverless functions. FiLM's backend needs a persistent process and disk (SQLite writes, ChromaDB, file uploads) — that can never run on Vercel. Hosting just the frontend there would still require the backend to live somewhere else, so a single Docker host is simpler.
+
+---
+
 ## Stack
 
 | Layer | Technology |
