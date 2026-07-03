@@ -1101,3 +1101,26 @@ Verified: 76/76 pytest, `tsc --noEmit` clean, production `vite build` clean.
 - **README**: new "Deployment (single host)" section — Railway walkthrough (volume at `/data`, optional env keys, generate domain), a prominent **no-authentication warning** (anyone with the URL can read chats and spend your API keys), cold-start note (Chroma downloads its embedding model on first message), Ollama-is-local-only note, and why Vercel can't host this.
 
 Verified: 76/76 pytest, `tsc` + `vite build` clean, and a deployed-shape smoke test (dist copied to `backend/static`, uvicorn on :8123 → `/` serves index.html, `/api/models` serves JSON). `backend/static/` gitignored.
+
+---
+
+**User:** "how complex would it be to add a login feature" → (estimates clarified as Claude time) → "please build the password gate"
+
+**Assistant:** Built the optional password gate — a single shared password for hosted deployments, zero friction locally.
+
+Backend:
+- New `app/routers/auth.py`: `GET /api/auth/status` (`{auth_required, authenticated}`), `POST /api/auth/login` (401 on mismatch; sets the session cookie), `POST /api/auth/logout`. The password is `FILM_PASSWORD`, read **at request time** — unset means auth is fully disabled (local dev and the rest of the test suite untouched).
+- Stateless session: the cookie value is `HMAC-SHA256(password, "film-session-v1")` — no session table, survives restarts, and changing the password invalidates every session at once. Both password and cookie checks use `hmac.compare_digest`. Cookie: `film_session`, 30 days, httponly, samesite=lax, secure on https.
+- `main.py` middleware: 401s any `/api/*` request (except `/api/auth/*`) without a valid session; the static frontend stays reachable so the login screen can load.
+- Dockerfile CMD gains `--proxy-headers --forwarded-allow-ips "*"` so uvicorn sees `https` behind the host's TLS-terminating proxy (needed for the cookie's Secure flag on Railway).
+- Tests: new `test_auth.py` AUTH-001…004 (auth off when unset; API locked when set; wrong/correct login flow + cookie; logout + forged-cookie rejection) via per-test `monkeypatch` of the env var. Suite now **80/80 passing**.
+
+Frontend:
+- New `LoginScreen.tsx`: centered FiLM-branded card — password input, busy state, inline "Incorrect password" error.
+- `App.tsx` gates on a `checking → required → ok` state: `authAPI.status()` on mount decides; the app shell (and the `loadMuses`/`loadModels` effects) only mounts once `ok`, so no 401 spam pre-login.
+- Mid-session expiry handled globally: `fetchAPI` dispatches a `film-unauthorized` window event on any 401 (except `/auth` endpoints, so a wrong password doesn't loop) and App listens and drops back to the login screen — e.g. when the password is changed server-side.
+- `authAPI` (status/login/logout) in `api.ts`; `.login-*` styles in App.css.
+
+Docs: README deployment section now leads with "Set a password" (FILM_PASSWORD in the Railway variables step, replacing the no-auth warning); test_plan.md Suite 6 (AUTH-001…004, P0 gate count 43 → 46); roadmap entries for single-host deployment + password gate.
+
+Verified: 80/80 pytest, `tsc --noEmit` clean, production `vite build` clean.

@@ -1,12 +1,13 @@
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app.models.database import Base, engine
-from app.routers import chats, folders, context, muses, models
+from app.routers import auth, chats, folders, context, muses, models
 
 # Built frontend (copied here by the Dockerfile); absent in local dev
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -49,7 +50,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Password gate — active only when FILM_PASSWORD is set (e.g. hosted deployments).
+# Guards the API; the static frontend stays reachable so the login screen can load.
+@app.middleware("http")
+async def require_auth(request: Request, call_next):
+    path = request.url.path
+    if (
+        path.startswith("/api")
+        and not path.startswith("/api/auth")
+        and not auth.is_authenticated(request)
+    ):
+        return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
+    return await call_next(request)
+
+
 # Include routers
+app.include_router(auth.router)
 app.include_router(chats.router)
 app.include_router(folders.router)
 app.include_router(context.router)

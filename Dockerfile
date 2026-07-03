@@ -21,5 +21,7 @@ ENV FILM_DATA_DIR=/data
 
 EXPOSE 8000
 
-# $PORT is injected by most hosts (Railway, Fly, Render); defaults to 8000
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+# $PORT is injected by most hosts (Railway, Fly, Render); defaults to 8000.
+# --proxy-headers so the app sees https behind the host's TLS-terminating proxy
+# (needed for the Secure flag on the auth session cookie).
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips "*"

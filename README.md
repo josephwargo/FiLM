@@ -155,14 +155,14 @@ RAG = Retrieval-Augmented Generation. Before sending your question to the AI, ad
 
 FiLM ships as one Docker image: the `Dockerfile` builds the frontend, then FastAPI serves both the static app and the API from a single port — no CORS, no separate frontend host. All persistent data (SQLite, ChromaDB, uploads) lives under `FILM_DATA_DIR` (defaults to `/data` in the image), so the host needs a **persistent volume** — on an ephemeral filesystem your chats would be wiped every restart.
 
-> **Warning — no authentication.** FiLM has no login. Anyone with the URL can read every chat, upload files, and burn through your API keys. Only deploy somewhere private, keep the URL to yourself, or put an auth proxy in front of it.
+> **Set a password.** By default FiLM has no login — anyone with the URL can read every chat, upload files, and burn through your API keys. For any hosted deployment, set the `FILM_PASSWORD` environment variable to enable the built-in password gate: the API returns 401 until you sign in, and the frontend shows a login screen. Sessions last 30 days (an HMAC cookie derived from the password), and changing the password signs everyone out at once. Leave `FILM_PASSWORD` unset for local use — auth stays fully disabled.
 
 ### Railway (recommended)
 
 1. Push the repo to GitHub
 2. [railway.com](https://railway.com) → **New Project** → **Deploy from GitHub repo** → pick your fork (the Dockerfile is detected automatically)
 3. On the service: **Settings → Volumes → Add Volume**, mount path `/data`
-4. Optional — **Variables**: add `GEMINI_API_KEY` (or skip it and paste keys into the in-app Model Manager instead; they're stored in SQLite on the volume)
+4. **Variables**: add `FILM_PASSWORD` (the login password — strongly recommended for anything public). Optional: `GEMINI_API_KEY` (or skip it and paste keys into the in-app Model Manager instead; they're stored in SQLite on the volume)
 5. **Settings → Networking → Generate Domain** — that's your app URL
 
 Notes:
@@ -199,11 +199,13 @@ Vercel only hosts static sites and short-lived serverless functions. FiLM's back
 - [x] Virtual file system — chat folders with unlimited nesting
 - [x] RAG context system — attach chats and files as context
 - [x] File folders — organize uploaded files, attach entire folders at once
-- [x] API test suite (76 tests — chats, folders, context, Muses, recursive context, slicing, models, credentials)
+- [x] API test suite (80 tests — chats, folders, context, Muses, recursive context, slicing, models, credentials, auth)
 - [x] Muses — custom AI personalities with their own system prompts and pinned context, assignable per chat
 - [x] Chat slicing — attach only a portion of a chat's history via inline scissors editor
 - [x] UX flow redesign — single Muse editing surface, "From Muse" context visibility, click-to-slice, welcome guide
 - [x] Persistent layout — sidebar and Context panel always visible (with drag-resize that persists across views), Muse picker in the Context panel, staged Muse saves, Muse-context slicing
 - [x] Model Selector (Phase 1) — per-chat Gemini model choice with provenance stamps and retired-model fallback
 - [x] Model Selector (Phase 2) — multi-provider models (Anthropic, OpenAI, Ollama) + Model Manager with API-key validation and send-failure recovery
+- [x] Single-host deployment — one Docker image (FastAPI serves the built frontend), persistent `/data` volume, Railway walkthrough
+- [x] Password gate — optional `FILM_PASSWORD` login for hosted deployments (HMAC session cookie, 30-day sessions)
 - [ ] Search across all chats

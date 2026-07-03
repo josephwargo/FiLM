@@ -151,11 +151,23 @@ Tests use an isolated SQLite DB (`tests/test_film.db`) and mock all external cal
 
 ---
 
+## Suite 6 — Password Gate
+*File: `backend/tests/test_auth.py`*
+
+| ID | Test Name | Priority | Type | Description | Expected Result |
+|----|-----------|----------|------|-------------|-----------------|
+| AUTH-001 | Auth disabled when password unset | P0 | Smoke | No `FILM_PASSWORD`; GET /api/chats and /api/auth/status | API open; status reports `auth_required: false, authenticated: true` |
+| AUTH-002 | API locked when password set | P0 | Smoke | Set `FILM_PASSWORD`; hit /api/chats without a session | 401 on API routes; /api/auth/status stays reachable and reports unauthenticated |
+| AUTH-003 | Login flow | P0 | Smoke | POST /api/auth/login with wrong then correct password | Wrong → 401; correct → 200, `film_session` cookie set, API unlocked, status authenticated |
+| AUTH-004 | Logout + forged cookie rejected | P1 | Regression | Logout after login; then set a fabricated cookie value | API 401s after logout; forged cookie does not authenticate |
+
+---
+
 ## Pass/Fail Criteria for Release
 
 | Gate | Requirement |
 |------|-------------|
-| **Ship** | All P0 tests pass (43 P0 tests across all suites) |
+| **Ship** | All P0 tests pass (46 P0 tests across all suites) |
 | **Ship with caveats** | All P0 pass; any P1 failures documented as known issues |
 | **Do not ship** | Any P0 failure |
 
@@ -177,7 +189,7 @@ Tests use an isolated SQLite DB (`tests/test_film.db`) and mock all external cal
 ## Adding New Tests
 
 When a new feature is built:
-1. Add test cases to the appropriate file (`test_chats.py`, `test_folders.py`, `test_context.py`, `test_muses.py`, or `test_models.py`)
+1. Add test cases to the appropriate file (`test_chats.py`, `test_folders.py`, `test_context.py`, `test_muses.py`, `test_models.py`, or `test_auth.py`)
 2. Assign the next ID in sequence (e.g., MUSE-019, CTX-020)
 3. Add a row to the corresponding table above
 4. Mark priority based on: P0 if a regression would break the UI for any user, P1 if it degrades a named feature, P2 otherwise

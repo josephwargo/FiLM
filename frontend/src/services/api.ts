@@ -12,6 +12,10 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
   });
 
   if (!response.ok) {
+    if (response.status === 401 && !endpoint.startsWith('/auth')) {
+      // Session gone (e.g. password changed server-side) — send the app back to login
+      window.dispatchEvent(new Event('film-unauthorized'));
+    }
     const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
     const detail = error.detail;
     const message =
@@ -21,6 +25,20 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
 
   return response.json();
 }
+
+// Auth (password gate — active only when the server has FILM_PASSWORD set)
+export const authAPI = {
+  status: () =>
+    fetchAPI<{ auth_required: boolean; authenticated: boolean }>('/auth/status'),
+
+  login: (password: string) =>
+    fetchAPI<{ status: string }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    }),
+
+  logout: () => fetchAPI<{ status: string }>('/auth/logout', { method: 'POST' }),
+};
 
 // Chats
 export const chatsAPI = {

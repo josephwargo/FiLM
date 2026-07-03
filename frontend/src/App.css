@@ -2384,3 +2384,76 @@ body {
   color: var(--error);
   border-color: var(--error);
 }
+
+/* Login screen (password gate) */
+.login-screen {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-primary);
+}
+
+.login-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 320px;
+  padding: 36px 32px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.login-logo {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 4px;
+}
+
+.login-hint {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.login-input {
+  padding: 10px 12px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  outline: none;
+}
+
+.login-input:focus {
+  border-color: var(--accent);
+}
+
+.login-error {
+  font-size: 0.82rem;
+  color: var(--error);
+}
+
+.login-btn {
+  padding: 10px;
+  background-color: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.login-btn:hover:not(:disabled) {
+  background-color: var(--accent-hover);
+}
+
+.login-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
