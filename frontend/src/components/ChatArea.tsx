@@ -4,13 +4,14 @@ import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import { useChatStore } from '../store/chatStore';
 import { ModelPicker } from './ModelPicker';
+import { MessageContextView } from './MessageContextView';
 
 const MD_PLUGINS = [rehypeHighlight];
 
 export function ChatArea() {
   const {
     currentChat, models, isSending, streamingContent, sendMessage, createChat,
-    sendError, clearSendError, openModelManager,
+    sendError, clearSendError, openModelManager, openMuseLibrary,
   } = useChatStore();
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -114,6 +115,9 @@ export function ChatArea() {
                 <Wand2 size={18} />
                 <strong>Muses</strong>
                 <span>Reusable AI personalities with their own pinned context — assign one per chat.</span>
+                <button className="welcome-card-link" onClick={() => openMuseLibrary()}>
+                  Open the Muse Editor →
+                </button>
               </div>
             </div>
             <p className="chat-empty-hint">Type a message below to start a new chat, or pick one from the Library.</p>
@@ -157,6 +161,9 @@ export function ChatArea() {
                 <ReactMarkdown rehypePlugins={MD_PLUGINS}>{message.content}</ReactMarkdown>
                 {showProvenance && message.role === 'assistant' && message.model && (
                   <div className="message-model-label">{modelName(message.model)}</div>
+                )}
+                {message.role === 'assistant' && (
+                  <MessageContextView snapshot={message.context_snapshot} />
                 )}
               </div>
             </div>

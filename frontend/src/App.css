@@ -65,6 +65,16 @@ body {
   font-weight: 700;
   color: var(--accent);
   letter-spacing: 3px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 6px;
+  transition: background-color 0.15s;
+}
+
+.topbar-logo:hover {
+  background-color: rgba(233, 69, 96, 0.12);
 }
 
 .app-body {
@@ -208,6 +218,20 @@ body {
 
 .sidebar-item-action:hover {
   color: var(--error);
+}
+
+.icon-folder {
+  color: #e0a83c;
+  flex-shrink: 0;
+}
+
+.new-folder-cancel {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.new-folder-cancel:hover {
+  color: var(--text-primary);
 }
 
 .sidebar-divider {
@@ -1152,13 +1176,12 @@ body {
 }
 
 .context-section h4 {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
-  color: var(--ctx-accent);
-  opacity: 0.55;
+  color: var(--text-secondary);
   margin-bottom: 8px;
-  letter-spacing: 0.08em;
-  font-weight: 600;
+  letter-spacing: 0.5px;
+  font-weight: 400;
 }
 
 .context-new-folder-input {
@@ -1206,10 +1229,10 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   color: var(--text-secondary);
   transition: background-color 0.15s, color 0.15s;
 }
@@ -1252,14 +1275,15 @@ body {
 }
 
 /* Current Context — a STATUS card (what the AI sees right now), visually distinct
-   from the Add & Configure controls below it */
+   from the File Library controls below it */
 .current-context-zone {
   margin: 12px;
   padding: 12px;
-  border: 1px solid var(--ctx-border);
+  border: 1px solid rgba(99, 102, 241, 0.45);
   border-left: 3px solid var(--ctx-accent);
   border-radius: 8px;
-  background-color: rgba(99, 102, 241, 0.1);
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.22) 0%, rgba(99, 102, 241, 0.08) 100%);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.15);
   transition: border-color 0.2s, background-color 0.2s;
 }
 
@@ -2456,4 +2480,124 @@ body {
 .login-btn:disabled {
   opacity: 0.55;
   cursor: default;
+}
+
+/* Per-message context snapshot (what the model saw for this reply) */
+.ctx-snap {
+  margin-top: 8px;
+  font-size: 0.75rem;
+}
+
+.ctx-snap-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  background: none;
+  border: 1px solid var(--ctx-border);
+  border-radius: 10px;
+  color: var(--ctx-accent-hover);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.ctx-snap-toggle:hover {
+  background-color: var(--ctx-highlight);
+  border-color: var(--ctx-accent);
+}
+
+.ctx-snap-list {
+  margin-top: 6px;
+  border: 1px solid var(--ctx-border);
+  border-radius: 8px;
+  background-color: var(--ctx-bg);
+  overflow: hidden;
+}
+
+.ctx-snap-item + .ctx-snap-item {
+  border-top: 1px solid var(--ctx-border);
+}
+
+.ctx-snap-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ctx-snap-row:hover {
+  background-color: var(--ctx-highlight);
+}
+
+.ctx-snap-row svg {
+  flex-shrink: 0;
+  color: var(--ctx-accent-hover);
+}
+
+.ctx-snap-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ctx-snap-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background-color: var(--ctx-highlight);
+  color: var(--ctx-accent-hover);
+  font-size: 0.65rem;
+}
+
+.ctx-snap-content {
+  margin: 0;
+  padding: 8px 10px 10px 28px;
+  max-height: 240px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  background-color: var(--bg-tertiary);
+}
+
+.ctx-snap-toggle-static {
+  color: var(--text-secondary);
+  border-color: var(--border);
+  cursor: default;
+}
+
+.ctx-snap-toggle-static:hover {
+  background: none;
+  border-color: var(--border);
+}
+
+.welcome-card-link {
+  margin-top: 4px;
+  padding: 4px 10px;
+  background: none;
+  border: 1px solid var(--muse-border);
+  border-radius: 8px;
+  color: var(--muse-accent);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.welcome-card-link:hover {
+  background-color: var(--muse-highlight);
+  border-color: var(--muse-accent);
 }

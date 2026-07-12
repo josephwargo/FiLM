@@ -14,6 +14,7 @@ function App() {
   const loadMuses = useChatStore((s) => s.loadMuses);
   const loadModels = useChatStore((s) => s.loadModels);
   const view = useChatStore((s) => s.view);
+  const goHome = useChatStore((s) => s.goHome);
   const [auth, setAuth] = useState<'checking' | 'required' | 'ok'>('checking');
 
   useEffect(() => {
@@ -41,7 +42,7 @@ function App() {
   return (
     <div className="app">
       <div className="topbar">
-        <span className="topbar-logo">FiLM</span>
+        <button className="topbar-logo" onClick={goHome} title="Go to home">FiLM</button>
       </div>
       <div className="app-body">
         <Sidebar />

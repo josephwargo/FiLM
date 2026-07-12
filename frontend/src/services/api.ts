@@ -73,7 +73,7 @@ export const chatsAPI = {
     chatId: string,
     message: string,
     onChunk: (chunk: string) => void,
-    onDone: (messageId: string, title?: string, model?: string) => void,
+    onDone: (messageId: string, title?: string, model?: string, contextSnapshot?: string | null) => void,
     onError: (error: Error, info?: import('../types').SendErrorInfo) => void
   ) => {
     try {
@@ -102,7 +102,7 @@ export const chatsAPI = {
           else if (data.error) {
             onError(new Error(data.error.message || 'The model failed to respond'), data.error);
             return;
-          } else if (data.done) onDone(data.message_id, data.title, data.model);
+          } else if (data.done) onDone(data.message_id, data.title, data.model, data.context_snapshot);
         }
       }
     } catch (error) {

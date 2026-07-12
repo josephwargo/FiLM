@@ -343,7 +343,7 @@ export function ContextPanel() {
             onDrop={(e) => onFileFolderRowDrop(e, folder.id)}
             onClick={() => !allAdded && !isEmpty && attachFileFolder(folder)}
           >
-            <Folder size={14} />
+            <Folder size={16} className="icon-folder" fill="currentColor" fillOpacity={0.25} />
             <span>{folder.name}</span>
             {isEmpty
               ? <span className="folder-empty-badge">empty</span>
@@ -376,7 +376,7 @@ export function ContextPanel() {
                       onDragStart={(e) => onDragStart(e, 'file', file.id)}
                       onClick={() => !isAttached('file', file.id) && attachFile(file.id)}
                     >
-                      <FileText size={12} />
+                      <FileText size={14} />
                       <span>{file.filename}</span>
                       {isAttached('file', file.id) && <span className="attached-badge">Added</span>}
                     </div>
@@ -500,7 +500,7 @@ export function ContextPanel() {
 
       {/* Controls below — these change settings, unlike the status card above */}
       <div className="context-tools-divider">
-        <span>Add &amp; Configure</span>
+        <span>File Library</span>
       </div>
 
       {/* File Folders */}
@@ -529,6 +529,13 @@ export function ContextPanel() {
               }}
             />
             <button className="btn btn-primary btn-sm" onClick={createFileFolder}>Create</button>
+            <button
+              className="btn btn-icon new-folder-cancel"
+              onClick={() => { setShowNewFileFolder(false); setNewFileFolderName(''); }}
+              title="Cancel"
+            >
+              <X size={16} />
+            </button>
           </div>
         )}
 
@@ -556,7 +563,7 @@ export function ContextPanel() {
               onDragStart={(e) => onDragStart(e, 'file', file.id)}
               onClick={() => !isAttached('file', file.id) && attachFile(file.id)}
             >
-              <FileText size={14} />
+              <FileText size={16} />
               <span>{file.filename}</span>
               {isAttached('file', file.id) && <span className="attached-badge">Added</span>}
               <button

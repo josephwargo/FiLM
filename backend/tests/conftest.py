@@ -55,6 +55,13 @@ def _mock_gemini():
 # ── DB fixtures ───────────────────────────────────────────────────────────────
 
 @pytest.fixture(autouse=True)
+def _auth_disabled(monkeypatch):
+    """The developer's backend/.env may set FILM_PASSWORD (loaded at app import);
+    tests run with auth disabled unless they set it themselves (test_auth.py)."""
+    monkeypatch.delenv("FILM_PASSWORD", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def reset_db():
     """Create fresh tables before each test; drop them after."""
     Base.metadata.create_all(bind=engine)

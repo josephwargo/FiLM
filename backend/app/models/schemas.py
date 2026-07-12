@@ -95,6 +95,9 @@ class Message(Base):
     content = Column(Text, nullable=False)
     # Provenance: which model produced this message. Null on user messages and legacy rows.
     model = Column(String, nullable=True)
+    # JSON snapshot of the context injected for this send (assistant messages only;
+    # null when the send had no muse and no attachments, and on legacy rows)
+    context_snapshot = Column(Text, nullable=True)
     timestamp = Column(DateTime, default=_utcnow)
 
     # Relationships

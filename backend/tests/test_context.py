@@ -505,3 +505,54 @@ def test_slice_with_unknown_message_id_falls_back(client):
 
     ctx = captured.get("context") or ""
     assert "ONLY_TURN_CONTENT" in ctx
+
+
+# ── CTX-024 ───────────────────────────────────────────────────────────────────
+
+def test_context_snapshot_stored_on_assistant_message(client):
+    """CTX-024 [P1]: The assistant message records a JSON snapshot of the injected
+    context (muse + parts); sends with no context store null."""
+    import json as _json
+
+    mock_gemini = MagicMock()
+    mock_gemini.generate_response.return_value = "ok"
+
+    # No muse, no attachments → snapshot is null
+    plain = client.post("/api/chats", json={"title": "Plain"}).json()["id"]
+    with patch("app.routers.chats.get_llm_service", lambda _mid: mock_gemini):
+        _send(client, plain, "hello")
+    msgs = client.get(f"/api/chats/{plain}").json()["messages"]
+    assert msgs[-1]["role"] == "assistant"
+    assert msgs[-1]["context_snapshot"] is None
+
+    # Muse + attached chat → snapshot captures both
+    muse = client.post(
+        "/api/muses",
+        json={"name": "Snap Muse", "system_prompt": "BE_BRIEF"},
+    ).json()
+    src = client.post("/api/chats", json={"title": "Snapshot Source"}).json()["id"]
+    with patch("app.routers.chats.get_llm_service", lambda _mid: mock_gemini):
+        _send(client, src, "SOURCE_CONTENT")
+
+    tgt = client.post("/api/chats", json={"title": "Target"}).json()["id"]
+    client.patch(f"/api/chats/{tgt}", json={"muse_id": muse["id"]})
+    client.post(
+        "/api/context/attach",
+        json={"chat_id": tgt, "source_type": "chat", "source_id": src},
+    )
+
+    with patch("app.routers.chats.get_llm_service", lambda _mid: mock_gemini):
+        _send(client, tgt, "Go")
+
+    msgs = client.get(f"/api/chats/{tgt}").json()["messages"]
+    snap = msgs[-1]["context_snapshot"]
+    assert snap is not None
+    data = _json.loads(snap)
+    assert data["muse"] == "Snap Muse"
+    assert data["system_prompt"] == "BE_BRIEF"
+    labels = [p["label"] for p in data["parts"]]
+    assert "Snapshot Source" in labels
+    part = next(p for p in data["parts"] if p["label"] == "Snapshot Source")
+    assert part["type"] == "chat"
+    assert part["sliced"] is False
+    assert "SOURCE_CONTENT" in part["content"]

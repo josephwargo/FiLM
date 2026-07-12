@@ -1124,3 +1124,54 @@ Frontend:
 Docs: README deployment section now leads with "Set a password" (FILM_PASSWORD in the Railway variables step, replacing the no-auth warning); test_plan.md Suite 6 (AUTH-001…004, P0 gate count 43 → 46); roadmap entries for single-host deployment + password gate.
 
 Verified: 80/80 pytest, `tsc --noEmit` clean, production `vite build` clean.
+
+---
+
+**User:** "For each chat, have an option in the UI to expand and show what was in the context when that chat was sent" (chose: structured source list expandable to full text, expander on each assistant reply).
+
+**Assistant:** Built per-message context snapshots.
+
+Backend:
+- `Message.context_snapshot` (nullable TEXT + inline migration — **backend restart required**): a JSON record `{muse, system_prompt, parts: [{type, label, sliced, content}]}` stamped on every assistant message at send time; null when the send had no muse and no attachments (and on legacy rows).
+- `_build_context_parts` now returns structured parts instead of pre-formatted strings; a new `_format_context_part` renders them into the exact same LLM-facing context string as before (verified by the existing slicing tests). `_resolve_context` also returns the muse name.
+- Both send paths store the snapshot; the SSE `done` event carries `context_snapshot` so the streamed reply shows it without a refetch. `MessageResponse` exposes the raw JSON string.
+- conftest.py: autouse fixture deletes `FILM_PASSWORD` per test — the developer's `backend/.env` now sets it (loaded at app import), which had locked the whole suite out with 401s. `test_auth.py` still sets it per-test.
+- New CTX-024: snapshot present with muse + attached chat (correct labels/flags/content), null on a plain send. Suite now **81/81 passing**.
+
+Frontend:
+- New `MessageContextView.tsx`: a small "Context · n sources" pill under each assistant reply that has a snapshot; expands to a list — Muse system prompt row + one row per injected chat/file (icon, label, "Sliced" badge) — and each row click-expands to the raw text the model received (scrollable `<pre>`).
+- `Message.context_snapshot` + parsed `ContextSnapshot` type; `streamMessage`'s `onDone` passes the snapshot through; the store stamps it on streamed assistant messages. `.ctx-snap-*` styles (indigo context palette).
+
+Docs: README "How context works" (+ snapshot paragraph) + roadmap; test_plan.md CTX-024.
+
+Verified: 81/81 pytest, `tsc --noEmit` clean, production `vite build` clean.
+
+---
+
+**User:** "When there are no files or other chats in context, could you add an indicator that shows that only previous chat history is in context?"
+
+**Assistant:** Assistant replies without a context snapshot now show a muted, non-clickable "Context · chat history only" pill (tooltip explains the model only saw the chat's previous messages) instead of nothing. `MessageContextView` accepts a null snapshot; ChatArea renders it for every assistant message. `tsc` + build clean.
+
+---
+
+**User:** "Add a link to the 'Muse Editor' from the home page"
+
+**Assistant:** The welcome screen's Muses concept card now has an "Open the Muse Editor →" button (violet, matching the muse palette) that opens the Muse Library. `tsc` + build clean.
+
+---
+
+**User:** "Make the 'FiLM' logo a home button; make Current Context more visually distinct; make the RHS File section match the LHS chat section styling; rename 'Add & Configure'"
+
+**Assistant:** Four UI polish changes, frontend-only:
+- Topbar "FiLM" logo is now a button — clicking it returns to the home/welcome screen (new `goHome` store action: `view: 'chat'` + `currentChat: null`); subtle hover highlight.
+- Current Context card strengthened: indigo gradient fill, brighter border, soft glow (box-shadow) — clearly a status card vs the plain sections below.
+- RHS file sections now visually rhyme with the LHS chat sidebar: section labels match `.root-chats-label` (0.75rem uppercase, text-secondary, 0.5px letter-spacing), file/folder rows match `.sidebar-item` metrics (10px 12px padding, 0.9rem text, 16px icons; indented rows 14px).
+- "Add & Configure" divider renamed to "File Library" (mirrors the LHS "Library" header).
+
+Verified: `tsc --noEmit` + production `vite build` clean.
+
+---
+
+**User:** "Make the chat and folder icon more visually distinct; let me cancel the 'new folder' input"
+
+**Assistant:** Folder icons (LHS chat folders + RHS file folders) are now amber with a subtle fill (`.icon-folder`, fill-opacity 0.25) so they read differently from the monochrome chat/file icons at a glance. Both new-folder inputs (sidebar + context panel) now have an X cancel button, and the sidebar input also closes on Escape (the context panel one already did). `tsc` + build clean.

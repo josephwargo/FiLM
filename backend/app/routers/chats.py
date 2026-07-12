@@ -33,14 +33,23 @@ def _classify_send_error(e: Exception, model_id: str) -> dict:
     }
 
 
+def _format_context_part(part: dict) -> str:
+    """Render one structured context part into the string injected into the LLM call."""
+    if part["type"] == "chat":
+        slice_note = " (sliced)" if part["sliced"] else ""
+        return f"--- Context from chat: {part['label']}{slice_note} ---\n{part['content']}"
+    return f"--- Context from file: {part['label']} ---\n{part['content']}"
+
+
 def _build_context_parts(
     db: Session,
     refs: List[Tuple],
     visited: Set[str],
     depth: int = 0,
-) -> List[str]:
+) -> List[dict]:
     """
-    Recursively resolve context from (source_type, source_id, start_message_id, end_message_id) refs.
+    Recursively resolve context from (source_type, source_id, start_message_id, end_message_id) refs
+    into structured parts: {type, label, sliced, content}.
     start_message_id / end_message_id are only meaningful for CHAT sources; if either is missing
     from the chat (e.g. the message was deleted), that side falls back to the chat's natural bound.
     visited tracks chat IDs already included to break cycles.
@@ -73,11 +82,15 @@ def _build_context_parts(
                         messages = messages[: end_idx + 1]
 
                     if messages:
-                        slice_note = " (sliced)" if (start_id or end_id) else ""
-                        transcript = f"--- Context from chat: {source_chat.title}{slice_note} ---\n"
+                        transcript = ""
                         for msg in messages:
                             transcript += f"{msg.role.value}: {msg.content}\n"
-                        parts.append(transcript)
+                        parts.append({
+                            "type": "chat",
+                            "label": source_chat.title,
+                            "sliced": bool(start_id or end_id),
+                            "content": transcript,
+                        })
 
                 if depth < MAX_CONTEXT_DEPTH:
                     sub_attachments = db.query(ContextAttachment).filter(
@@ -93,32 +106,36 @@ def _build_context_parts(
                 file_record = db.query(UploadedFile).filter(UploadedFile.id == source_id).first()
                 if file_record:
                     file_ctx = chroma_service.get_document_by_id(source_id)
-                    if file_ctx:
-                        parts.append(f"--- Context from file: {file_record.original_filename} ---\n{file_ctx}")
-                    else:
-                        parts.append(f"--- Context from file: {file_record.original_filename} ---\n[File content not available - please re-upload]")
+                    parts.append({
+                        "type": "file",
+                        "label": file_record.original_filename,
+                        "sliced": False,
+                        "content": file_ctx or "[File content not available - please re-upload]",
+                    })
         except Exception as e:
             print(f"Error loading context ({source_type}, {source_id}): {e}")
             continue
     return parts
 
 
-def _resolve_context(db: Session, chat: Chat) -> Tuple[List[str], str | None]:
+def _resolve_context(db: Session, chat: Chat) -> Tuple[List[dict], str | None, str | None]:
     """
     Build the full ordered context for a chat send:
       1. Muse pinned context (prepended)
       2. Per-chat attached context
-    Returns (context_parts, system_prompt).
+    Returns (structured context_parts, system_prompt, muse_name).
     The visited set is shared so the same chat is never injected twice.
     """
     visited: Set[str] = {chat.id}  # prevent the current chat from appearing in its own context
-    context_parts: List[str] = []
+    context_parts: List[dict] = []
     system_prompt = None
+    muse_name = None
 
     if chat.muse_id:
         muse = db.query(Muse).filter(Muse.id == chat.muse_id).first()
         if muse:
             system_prompt = muse.system_prompt
+            muse_name = muse.name
             muse_ctxs = db.query(MuseContext).filter(MuseContext.muse_id == chat.muse_id).all()
             muse_refs = [
                 (mc.source_type, mc.source_id, mc.start_message_id, mc.end_message_id)
@@ -133,7 +150,14 @@ def _resolve_context(db: Session, chat: Chat) -> Tuple[List[str], str | None]:
     ]
     context_parts.extend(_build_context_parts(db, chat_refs, visited))
 
-    return context_parts, system_prompt
+    return context_parts, system_prompt, muse_name
+
+
+def _snapshot_context(context_parts: List[dict], system_prompt: str | None, muse_name: str | None) -> str | None:
+    """JSON record of what was injected, stored on the assistant message. Null when nothing was."""
+    if not context_parts and not system_prompt:
+        return None
+    return json.dumps({"muse": muse_name, "system_prompt": system_prompt, "parts": context_parts})
 
 
 @router.get("", response_model=List[ChatListResponse])
@@ -223,8 +247,9 @@ async def send_message(chat_id: str, request: ChatMessageRequest, db: Session = 
     )
 
     history = [{"role": msg.role.value, "content": msg.content} for msg in chat.messages[:-1]]
-    context_parts, system_prompt = _resolve_context(db, chat)
-    context = "\n\n".join(context_parts) if context_parts else None
+    context_parts, system_prompt, muse_name = _resolve_context(db, chat)
+    context = "\n\n".join(_format_context_part(p) for p in context_parts) if context_parts else None
+    snapshot = _snapshot_context(context_parts, system_prompt, muse_name)
 
     model_id = resolve_model_id(chat.model)
     try:
@@ -237,7 +262,10 @@ async def send_message(chat_id: str, request: ChatMessageRequest, db: Session = 
     except Exception as e:
         raise HTTPException(status_code=502, detail=_classify_send_error(e, model_id))
 
-    assistant_message = Message(chat_id=chat_id, role=MessageRole.ASSISTANT, content=response_text, model=model_id)
+    assistant_message = Message(
+        chat_id=chat_id, role=MessageRole.ASSISTANT, content=response_text,
+        model=model_id, context_snapshot=snapshot,
+    )
     db.add(assistant_message)
     db.commit()
     db.refresh(assistant_message)
@@ -277,8 +305,9 @@ async def send_message_stream(chat_id: str, request: ChatMessageRequest, db: Ses
     )
 
     history = [{"role": msg.role.value, "content": msg.content} for msg in chat.messages[:-1]]
-    context_parts, system_prompt = _resolve_context(db, chat)
-    context = "\n\n".join(context_parts) if context_parts else None
+    context_parts, system_prompt, muse_name = _resolve_context(db, chat)
+    context = "\n\n".join(_format_context_part(p) for p in context_parts) if context_parts else None
+    snapshot = _snapshot_context(context_parts, system_prompt, muse_name)
 
     is_first_message = len(chat.messages) <= 2 and chat.title == "New Chat"
     new_title = request.message[:50] + ("..." if len(request.message) > 50 else "") if is_first_message else None
@@ -303,7 +332,10 @@ async def send_message_stream(chat_id: str, request: ChatMessageRequest, db: Ses
             yield f"data: {json.dumps({'error': _classify_send_error(e, model_id)})}\n\n"
             return
 
-        assistant_message = Message(chat_id=chat_id, role=MessageRole.ASSISTANT, content=full_response, model=model_id)
+        assistant_message = Message(
+            chat_id=chat_id, role=MessageRole.ASSISTANT, content=full_response,
+            model=model_id, context_snapshot=snapshot,
+        )
         db.add(assistant_message)
         db.commit()
 
@@ -313,6 +345,6 @@ async def send_message_stream(chat_id: str, request: ChatMessageRequest, db: Ses
             metadata={"chat_id": chat_id, "role": "assistant"},
         )
 
-        yield f"data: {json.dumps({'done': True, 'message_id': assistant_message.id, 'title': new_title, 'model': model_id})}\n\n"
+        yield f"data: {json.dumps({'done': True, 'message_id': assistant_message.id, 'title': new_title, 'model': model_id, 'context_snapshot': snapshot})}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")

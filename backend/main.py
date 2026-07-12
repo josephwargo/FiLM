@@ -26,6 +26,7 @@ _MIGRATIONS = [
     "ALTER TABLE muse_contexts ADD COLUMN end_message_id VARCHAR",
     "ALTER TABLE chats ADD COLUMN model VARCHAR",
     "ALTER TABLE messages ADD COLUMN model VARCHAR",
+    "ALTER TABLE messages ADD COLUMN context_snapshot TEXT",
 ]
 with engine.connect() as _conn:
     for _sql in _MIGRATIONS:

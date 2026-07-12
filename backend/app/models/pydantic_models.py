@@ -39,6 +39,7 @@ class MessageResponse(MessageBase):
     id: str
     chat_id: str
     model: Optional[str] = None
+    context_snapshot: Optional[str] = None
     timestamp: datetime
 
 

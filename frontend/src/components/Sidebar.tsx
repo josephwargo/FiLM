@@ -8,6 +8,7 @@ import {
   Folder,
   MessageSquare,
   Trash2,
+  X,
 } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { foldersAPI } from '../services/api';
@@ -151,7 +152,7 @@ export function Sidebar() {
             <button className="folder-toggle" onClick={() => toggleFolder(folder.id)}>
               {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             </button>
-            <Folder size={16} />
+            <Folder size={16} className="icon-folder" fill="currentColor" fillOpacity={0.25} />
             <span className="sidebar-item-text">{folder.name}</span>
             <button
               className="sidebar-item-action"
@@ -228,11 +229,21 @@ export function Sidebar() {
             placeholder="Folder name..."
             value={newFolderName}
             onChange={(e) => setNewFolderName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleCreateFolder()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleCreateFolder();
+              if (e.key === 'Escape') { setShowNewFolder(false); setNewFolderName(''); }
+            }}
             autoFocus
           />
           <button className="btn btn-primary btn-sm" onClick={handleCreateFolder}>
             Create
+          </button>
+          <button
+            className="btn btn-icon new-folder-cancel"
+            onClick={() => { setShowNewFolder(false); setNewFolderName(''); }}
+            title="Cancel"
+          >
+            <X size={16} />
           </button>
         </div>
       )}

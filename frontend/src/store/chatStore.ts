@@ -18,6 +18,7 @@ interface ChatStore {
   museLibraryTarget: string | 'new' | null;
 
   // Actions
+  goHome: () => void;
   openMuseLibrary: (target?: string | 'new') => void;
   closeMuseLibrary: () => void;
   openModelManager: () => void;
@@ -56,6 +57,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   sendError: null,
   view: 'chat',
   museLibraryTarget: null,
+
+  goHome: () => set({ view: 'chat', currentChat: null, museLibraryTarget: null }),
 
   openMuseLibrary: (target?: string | 'new') =>
     set({ view: 'muse-library', museLibraryTarget: target ?? null }),
@@ -216,7 +219,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         (chunk) => {
           set((state) => ({ streamingContent: (state.streamingContent ?? '') + chunk }));
         },
-        (messageId, title, model) => {
+        (messageId, title, model, contextSnapshot) => {
           const finalContent = get().streamingContent ?? '';
           const assistantMessage: Message = {
             id: messageId,
@@ -225,6 +228,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             content: finalContent,
             timestamp: new Date().toISOString(),
             model: model ?? null,
+            context_snapshot: contextSnapshot ?? null,
           };
           set((state) => ({
             currentChat: state.currentChat

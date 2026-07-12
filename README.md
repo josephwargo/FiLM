@@ -91,7 +91,7 @@ When you attach a chat or file and send a message:
 4. Bundles everything into a `<context>` block prepended to your message
 5. Sends the whole thing to the chat's model and streams the response back
 
-What you attach is exactly what gets sent — no hidden filtering.
+What you attach is exactly what gets sent — no hidden filtering. And you can verify it: every assistant reply stores a **context snapshot** of what was injected for that specific send. Click the small "Context · n sources" pill under a reply to expand the list — the Muse system prompt plus each attached chat or file (with a "Sliced" badge where a slice applied) — and click any source to read the exact text the model received. Replies sent with no attached context instead show a muted "Context · chat history only" indicator — the model only saw the chat's own previous messages.
 
 ### How the file system works
 
@@ -199,7 +199,7 @@ Vercel only hosts static sites and short-lived serverless functions. FiLM's back
 - [x] Virtual file system — chat folders with unlimited nesting
 - [x] RAG context system — attach chats and files as context
 - [x] File folders — organize uploaded files, attach entire folders at once
-- [x] API test suite (80 tests — chats, folders, context, Muses, recursive context, slicing, models, credentials, auth)
+- [x] API test suite (81 tests — chats, folders, context, Muses, recursive context, slicing, models, credentials, auth)
 - [x] Muses — custom AI personalities with their own system prompts and pinned context, assignable per chat
 - [x] Chat slicing — attach only a portion of a chat's history via inline scissors editor
 - [x] UX flow redesign — single Muse editing surface, "From Muse" context visibility, click-to-slice, welcome guide
@@ -208,4 +208,5 @@ Vercel only hosts static sites and short-lived serverless functions. FiLM's back
 - [x] Model Selector (Phase 2) — multi-provider models (Anthropic, OpenAI, Ollama) + Model Manager with API-key validation and send-failure recovery
 - [x] Single-host deployment — one Docker image (FastAPI serves the built frontend), persistent `/data` volume, Railway walkthrough
 - [x] Password gate — optional `FILM_PASSWORD` login for hosted deployments (HMAC session cookie, 30-day sessions)
+- [x] Per-message context snapshots — expand any assistant reply to see exactly what context (Muse, chats, files, slices) was sent with it
 - [ ] Search across all chats

@@ -97,6 +97,7 @@ Tests use an isolated SQLite DB (`tests/test_film.db`) and mock all external cal
 | CTX-021 | Sliced attachment trims LLM context | P0 | Smoke | Slice a chat attachment, send message | Only in-range messages appear in context; "(sliced)" header present |
 | CTX-022 | End-only slice includes from start | P1 | Integration | Set only `end_message_id` | Everything from the beginning up to the bound is included |
 | CTX-023 | Unknown bound ID falls back | P1 | Regression | Slice with a message ID not in the source chat | Falls back silently to the chat's natural bounds |
+| CTX-024 | Context snapshot stored on assistant message | P1 | Smoke | Send with muse + attached chat, then plain send | Assistant message carries JSON snapshot (muse, system_prompt, parts with type/label/sliced/content); null when no context |
 
 ---
 

@@ -5,6 +5,19 @@ export interface Message {
   content: string;
   timestamp: string;
   model?: string | null;
+  context_snapshot?: string | null;
+}
+
+// Parsed form of Message.context_snapshot (JSON stored on assistant messages)
+export interface ContextSnapshot {
+  muse: string | null;
+  system_prompt: string | null;
+  parts: {
+    type: 'chat' | 'file';
+    label: string;
+    sliced: boolean;
+    content: string;
+  }[];
 }
 
 export interface Chat {
